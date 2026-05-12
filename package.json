@@ -1,6 +1,6 @@
 {
   "name": "jlpt-lookup",
-  "version": "1.1.1",
+  "version": "1.2.0",
   "description": "日语划词查询工具 - JLPT释义、假名、语法分析",
   "main": "src/main/main.js",
   "author": "JLPT Lookup",
