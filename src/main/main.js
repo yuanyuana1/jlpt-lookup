@@ -64,6 +64,102 @@ if (!gotTheLock) {
   app.quit();
 }
 
+function createAppMenu() {
+  const { autoUpdater } = require('electron-updater');
+  const { shell, dialog } = require('electron');
+
+  const template = [
+    {
+      label: '文件',
+      submenu: [
+        {
+          label: '显示主窗口',
+          click: () => mainWindow && mainWindow.show()
+        },
+        { type: 'separator' },
+        {
+          label: '退出',
+          accelerator: 'Alt+F4',
+          click: () => app.exit()
+        }
+      ]
+    },
+    {
+      label: '编辑',
+      submenu: [
+        { label: '撤销', accelerator: 'CmdOrCtrl+Z', role: 'undo' },
+        { label: '重做', accelerator: 'CmdOrCtrl+Y', role: 'redo' },
+        { type: 'separator' },
+        { label: '剪切', accelerator: 'CmdOrCtrl+X', role: 'cut' },
+        { label: '复制', accelerator: 'CmdOrCtrl+C', role: 'copy' },
+        { label: '粘贴', accelerator: 'CmdOrCtrl+V', role: 'paste' },
+        { label: '全选', accelerator: 'CmdOrCtrl+A', role: 'selectAll' }
+      ]
+    },
+    {
+      label: '帮助',
+      submenu: [
+        {
+          label: '检查更新...',
+          click: () => {
+            if (!app.isPackaged) {
+              dialog.showMessageBox(mainWindow, {
+                type: 'info',
+                title: '检查更新',
+                message: '当前为开发版本，无法检查更新。',
+                buttons: ['确定']
+              });
+              return;
+            }
+            autoUpdater.checkForUpdates().catch(err => {
+              dialog.showMessageBox(mainWindow, {
+                type: 'error',
+                title: '检查更新失败',
+                message: err.message,
+                buttons: ['确定']
+              });
+            });
+          }
+        },
+        { type: 'separator' },
+        {
+          label: '在 GitHub 上查看源码',
+          click: () => shell.openExternal('https://github.com/yuanyuana1/jlpt-lookup')
+        },
+        {
+          label: '反馈问题',
+          click: () => shell.openExternal('https://github.com/yuanyuana1/jlpt-lookup/issues')
+        },
+        { type: 'separator' },
+        {
+          label: '关于 JLPT Lookup',
+          click: () => {
+            dialog.showMessageBox(mainWindow, {
+              type: 'info',
+              title: '关于 JLPT Lookup',
+              icon: path.join(__dirname, '../../assets/icon.png'),
+              message: 'JLPT Lookup',
+              detail: [
+                `版本：${app.getVersion()}`,
+                '',
+                '日语划词查询工具',
+                '支持 JLPT N5-N1 词汇查询、语法分析',
+                'AI 驱动的句子级深度解析',
+                '',
+                '© 2025 yuanyuana1'
+              ].join('\n'),
+              buttons: ['确定']
+            });
+          }
+        }
+      ]
+    }
+  ];
+
+  const menu = Menu.buildFromTemplate(template);
+  Menu.setApplicationMenu(menu);
+}
+
 function createMainWindow() {
   mainWindow = new BrowserWindow({
     width: 520,
@@ -240,6 +336,7 @@ app.whenReady().then(async () => {
 
   createMainWindow();
   createTray();
+  createAppMenu();
 
   registerHotkey(appConfig.hotkey);
 
@@ -347,6 +444,10 @@ ipcMain.handle('save-app-config', (event, config) => {
 ipcMain.handle('llm-clear-cache', () => {
   clearCache();
   return { success: true };
+});
+
+ipcMain.handle('get-app-version', () => {
+  return app.getVersion();
 });
 
 // 收藏相关 IPC

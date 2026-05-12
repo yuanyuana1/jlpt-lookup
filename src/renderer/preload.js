@@ -45,5 +45,8 @@ contextBridge.exposeInMainWorld('api', {
   onUpdateNotAvailable: (cb) => ipcRenderer.on('update-not-available', () => cb()),
   onUpdateDownloadProgress: (cb) => ipcRenderer.on('update-download-progress', (_, p) => cb(p)),
   onUpdateDownloaded: (cb) => ipcRenderer.on('update-downloaded', (_, info) => cb(info)),
-  onUpdateError: (cb) => ipcRenderer.on('update-error', (_, msg) => cb(msg))
+  onUpdateError: (cb) => ipcRenderer.on('update-error', (_, msg) => cb(msg)),
+
+  // 应用信息
+  getAppVersion: () => ipcRenderer.invoke('get-app-version')
 });
