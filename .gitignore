@@ -1,0 +1,10 @@
+node_modules/
+dist/
+.venv/
+data/jmdict-*.json
+data/jmdict-*.zip
+data/jmdict-*.tgz
+data/llm-cache.json
+data/llm-config.json
+data/history.json
+data/favorites.json

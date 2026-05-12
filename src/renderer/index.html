@@ -1,0 +1,915 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>JLPT Lookup</title>
+  <style>
+    /* ===== CSS 变量 - 深色主题（默认）===== */
+    :root, [data-theme="dark"] {
+      --bg-base:    #0d1117;
+      --bg-surface: #161b22;
+      --bg-input:   #21262d;
+      --border:     #21262d;
+      --border-sub: #30363d;
+      --text-primary:   #e6edf3;
+      --text-secondary: #c9d1d9;
+      --text-muted:     #8b949e;
+      --text-faint:     #6e7681;
+      --accent:     #58a6ff;
+      --accent-bg:  #388bfd26;
+      --green:      #238636;
+      --green-hover:#2ea043;
+      --purple-bg:  #a371f726;
+      --purple:     #a371f7;
+      --orange:     #f0883e;
+      --red:        #f85149;
+      --scrollbar:  #30363d;
+    }
+    [data-theme="light"] {
+      --bg-base:    #ffffff;
+      --bg-surface: #f6f8fa;
+      --bg-input:   #f6f8fa;
+      --border:     #d0d7de;
+      --border-sub: #d0d7de;
+      --text-primary:   #1f2328;
+      --text-secondary: #24292f;
+      --text-muted:     #57606a;
+      --text-faint:     #6e7781;
+      --accent:     #0969da;
+      --accent-bg:  #0969da1a;
+      --green:      #1a7f37;
+      --green-hover:#2da44e;
+      --purple-bg:  #8250df1a;
+      --purple:     #8250df;
+      --orange:     #bc4c00;
+      --red:        #cf222e;
+      --scrollbar:  #d0d7de;
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: var(--font-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif);
+      background: var(--bg-base);
+      color: var(--text-primary);
+      padding: 0; height: 100vh;
+      display: flex; flex-direction: column;
+      transition: background 0.2s, color 0.2s;
+    }
+    .topbar { display: flex; justify-content: space-between; align-items: center; padding: 12px 16px; border-bottom: 1px solid var(--border); background: var(--bg-surface); }
+    .topbar h1 { font-size: 15px; font-weight: 600; color: var(--text-primary); }
+    .topbar-right { display: flex; align-items: center; gap: 8px; }
+    .ai-status { font-size: 11px; padding: 2px 8px; border-radius: 12px; }
+    .ai-status.on  { background: var(--green); color: #fff; }
+    .ai-status.off { background: var(--border-sub); color: var(--text-muted); }
+    .icon-btn { background: none; border: none; color: var(--text-muted); cursor: pointer; padding: 6px; border-radius: 6px; font-size: 14px; }
+    .icon-btn:hover { background: var(--bg-input); color: var(--text-primary); }
+    .tabs { display: flex; border-bottom: 1px solid var(--border); background: var(--bg-surface); padding: 0 16px; }
+    .tab-btn { padding: 10px 16px; background: none; border: none; border-bottom: 2px solid transparent; color: var(--text-muted); cursor: pointer; font-size: 13px; font-weight: 500; transition: all 0.15s; }
+    .tab-btn:hover { color: var(--text-primary); }
+    .tab-btn.active { color: var(--text-primary); border-bottom-color: var(--accent); }
+    .tab-content { display: none; flex: 1; overflow: hidden; }
+    .tab-content.active { display: flex; flex-direction: column; }
+    .search-container { padding: 16px; }
+    .search-box { display: flex; background: var(--bg-input); border: 1px solid var(--border-sub); border-radius: 8px; overflow: hidden; }
+    .search-box:focus-within { border-color: var(--accent); }
+    .search-box input { flex: 1; padding: 12px 14px; border: none; background: transparent; color: var(--text-primary); font-size: 15px; outline: none; font-family: inherit; }
+    .search-box input::placeholder { color: var(--text-faint); }
+    .search-box button { padding: 12px 20px; background: var(--green); color: #fff; border: none; cursor: pointer; font-size: 14px; font-weight: 500; }
+    .search-box button:hover { background: var(--green-hover); }
+    .result-area { flex: 1; overflow-y: auto; padding: 0 16px 16px; }
+    .result-area::-webkit-scrollbar { width: 6px; }
+    .result-area::-webkit-scrollbar-thumb { background: var(--scrollbar); border-radius: 3px; }
+    .token-row { display: flex; flex-wrap: wrap; gap: 2px; padding: 10px 0 12px; border-bottom: 1px solid var(--border); }
+    .token { font-size: 15px; padding: 2px 4px; border-radius: 3px; cursor: default; }
+    .token-noun     { color: var(--text-primary); border-bottom: 2px solid var(--accent); }
+    .token-verb     { color: var(--text-primary); border-bottom: 2px solid #3fb950; }
+    .token-adj      { color: var(--text-primary); border-bottom: 2px solid var(--orange); }
+    .token-adv      { color: var(--text-primary); border-bottom: 2px solid var(--purple); }
+    .token-particle { color: var(--text-faint); }
+    .token-aux      { color: var(--text-faint); }
+    .token-other    { color: var(--text-secondary); }
+    .word-entry { display: flex; align-items: baseline; gap: 8px; padding: 5px 0; border-bottom: 1px solid var(--border); }
+    .word-entry:last-child { border-bottom: none; }
+    .word-entry .word-text    { font-size: 14px; font-weight: 500; color: var(--text-primary); flex-shrink: 0; }
+    .word-entry .word-reading { font-size: 12px; color: var(--text-faint); flex-shrink: 0; }
+    .word-entry .word-meaning { flex: 1; font-size: 13px; color: var(--text-muted); }
+    .word-entry .word-meta    { display: flex; gap: 4px; align-items: center; flex-shrink: 0; }
+    .badge { font-size: 10px; padding: 2px 6px; border-radius: 4px; font-weight: 600; }
+    .badge-jlpt { background: var(--accent-bg); color: var(--accent); }
+    .badge-pos  { background: var(--purple-bg); color: var(--purple); }
+    .fav-btn { background: none; border: none; color: var(--text-faint); cursor: pointer; font-size: 16px; padding: 4px; border-radius: 4px; }
+    .fav-btn:hover { color: var(--orange); background: #f0883e1a; }
+    .fav-btn.saved { color: var(--orange); }
+    .ai-result { margin-bottom: 16px; }
+    .ai-translation { font-size: 15px; color: var(--text-primary); padding: 10px 0; border-bottom: 1px solid var(--border); line-height: 1.6; }
+    .ai-section { margin-top: 12px; }
+    .ai-section-title { font-size: 10px; font-weight: 600; color: var(--text-faint); text-transform: uppercase; letter-spacing: 0.6px; margin-bottom: 6px; }
+    .grammar-item { padding: 7px 0; border-bottom: 1px solid var(--border); }
+    .grammar-item:last-child { border-bottom: none; }
+    .grammar-pattern { font-weight: 500; color: var(--accent); font-size: 13px; }
+    .grammar-pattern .badge { margin-left: 6px; vertical-align: middle; }
+    .grammar-desc { font-size: 12px; color: var(--text-muted); margin-top: 3px; line-height: 1.5; }
+    .conjugation-text { font-size: 13px; padding: 8px 12px; background: var(--bg-surface); border-radius: 6px; border-left: 3px solid var(--accent); }
+    .conj-row { display: flex; align-items: center; padding: 3px 0; border-bottom: 1px solid var(--border); }
+    .conj-row:last-child { border-bottom: none; }
+    .conj-chain { color: var(--text-secondary); font-size: 13px; }
+    .vocab-row { display: flex; align-items: baseline; gap: 8px; padding: 5px 0; border-bottom: 1px solid var(--border); }
+    .vocab-row:last-child { border-bottom: none; }
+    .vocab-word    { font-size: 14px; font-weight: 500; color: var(--text-primary); flex-shrink: 0; }
+    .vocab-reading { font-size: 12px; color: var(--text-faint); flex-shrink: 0; }
+    .vocab-meaning { font-size: 13px; color: var(--text-muted); flex: 1; }
+    .vocab-badge   { flex-shrink: 0; }
+    .fav-entry { padding: 6px 0; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 8px; }
+    .fav-entry .fav-word    { font-size: 14px; font-weight: 500; color: var(--text-primary); flex-shrink: 0; }
+    .fav-entry .fav-reading { font-size: 12px; color: var(--text-faint); flex-shrink: 0; }
+    .fav-entry .fav-meaning { flex: 1; font-size: 13px; color: var(--text-muted); }
+    .fav-entry .fav-actions { display: flex; gap: 4px; }
+    .fav-entry .delete-btn  { background: none; border: none; color: var(--text-faint); cursor: pointer; padding: 4px 6px; font-size: 12px; border-radius: 4px; }
+    .fav-entry .delete-btn:hover { color: var(--red); background: #f8514926; }
+    .history-entry { padding: 8px 0; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 10px; cursor: pointer; }
+    .history-entry:hover { background: var(--bg-surface); margin: 0 -16px; padding: 8px 16px; }
+    .history-entry .history-text { flex: 1; font-size: 14px; color: var(--text-secondary); }
+    .history-entry .history-time { font-size: 11px; color: var(--text-faint); }
+    .history-entry .delete-btn   { background: none; border: none; color: var(--text-faint); cursor: pointer; padding: 4px; font-size: 12px; opacity: 0; }
+    .history-entry:hover .delete-btn { opacity: 1; }
+    .history-entry .delete-btn:hover { color: var(--red); }
+    .empty-state { text-align: center; padding: 40px 20px; color: var(--text-faint); font-size: 13px; }
+    .empty-state p { margin-bottom: 8px; }
+    .empty-state kbd { background: var(--bg-input); padding: 2px 6px; border-radius: 4px; font-size: 12px; }
+    .loading { display: flex; align-items: center; gap: 8px; color: var(--text-muted); font-size: 13px; padding: 12px 0; }
+    .spinner { width: 14px; height: 14px; border: 2px solid var(--border-sub); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.6s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .settings-panel { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 100; }
+    .settings-panel.show { display: flex; align-items: center; justify-content: center; }
+    .settings-content { background: var(--bg-surface); border: 1px solid var(--border-sub); border-radius: 12px; padding: 20px; width: 380px; max-height: 85vh; overflow-y: auto; }
+    .settings-content::-webkit-scrollbar { width: 5px; }
+    .settings-content::-webkit-scrollbar-thumb { background: var(--scrollbar); border-radius: 3px; }
+    .settings-content h2 { font-size: 15px; font-weight: 600; margin-bottom: 14px; color: var(--text-primary); }
+    .form-group { margin-bottom: 12px; }
+    .form-group label { display: block; font-size: 12px; color: var(--text-muted); margin-bottom: 5px; }
+    .form-group select, .form-group input { width: 100%; padding: 7px 10px; border: 1px solid var(--border-sub); border-radius: 6px; background: var(--bg-base); color: var(--text-primary); font-size: 13px; outline: none; font-family: inherit; }
+    .form-group select:focus, .form-group input:focus { border-color: var(--accent); }
+    .form-group input[type="checkbox"] { width: auto; margin-right: 6px; }
+    .theme-picker { display: flex; gap: 8px; }
+    .theme-option { flex: 1; padding: 8px 4px; border: 2px solid var(--border-sub); border-radius: 8px; cursor: pointer; text-align: center; font-size: 12px; color: var(--text-muted); background: var(--bg-base); transition: all 0.15s; }
+    .theme-option:hover { border-color: var(--accent); color: var(--text-primary); }
+    .theme-option.active { border-color: var(--accent); color: var(--accent); background: var(--accent-bg); }
+    .theme-option .theme-icon { font-size: 18px; display: block; margin-bottom: 3px; }
+    .form-actions { display: flex; gap: 8px; margin-top: 16px; }
+    .form-actions button { flex: 1; padding: 8px; border-radius: 6px; border: none; cursor: pointer; font-size: 13px; font-weight: 500; }
+    .btn-primary { background: var(--green); color: #fff; }
+    .btn-primary:hover { background: var(--green-hover); }
+    .btn-secondary { background: var(--bg-input); color: var(--text-secondary); border: 1px solid var(--border-sub); }
+    .btn-secondary:hover { background: var(--border-sub); }
+    .divider { height: 1px; background: var(--border); margin: 14px 0; }
+    .status-msg { font-size: 12px; color: #3fb950; margin-top: 8px; display: none; }
+    .section-header { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; }
+    .section-header .count { font-size: 12px; color: var(--text-faint); }
+    .clear-btn { background: none; border: none; color: var(--text-faint); cursor: pointer; font-size: 12px; }
+    .clear-btn:hover { color: var(--red); }
+  </style>
+</head>
+<body>
+  <!-- 更新通知条（默认隐藏） -->
+  <div id="updateBar" style="display:none;background:var(--accent-bg);border-bottom:1px solid var(--accent);padding:8px 16px;font-size:12px;color:var(--accent);display:none;align-items:center;gap:10px;">
+    <span id="updateMsg" style="flex:1;"></span>
+    <div id="updateProgress" style="display:none;align-items:center;gap:8px;">
+      <div style="width:120px;height:4px;background:var(--border-sub);border-radius:2px;overflow:hidden;">
+        <div id="updateProgressBar" style="height:100%;background:var(--accent);width:0%;transition:width 0.3s;"></div>
+      </div>
+      <span id="updateProgressText" style="font-size:11px;color:var(--text-faint);"></span>
+    </div>
+    <button id="updateActionBtn" style="background:var(--accent);color:#fff;border:none;padding:4px 12px;border-radius:4px;cursor:pointer;font-size:12px;font-weight:500;display:none;"></button>
+    <button id="updateDismissBtn" style="background:none;border:none;color:var(--text-faint);cursor:pointer;font-size:14px;padding:2px 6px;">✕</button>
+  </div>
+
+  <!-- 顶部栏 -->
+  <div class="topbar">
+    <h1>JLPT Lookup</h1>
+    <div class="topbar-right">
+      <span class="ai-status off" id="llmBadge">AI</span>
+      <button class="icon-btn" id="settingsBtn" title="设置">⚙</button>
+    </div>
+  </div>
+
+  <!-- 标签页 -->
+  <div class="tabs">
+    <button class="tab-btn active" data-tab="search" id="tabSearch">查询</button>
+    <button class="tab-btn" data-tab="favorites" id="tabFavorites">生词本</button>
+    <button class="tab-btn" data-tab="history" id="tabHistory">历史</button>
+  </div>
+  
+  <!-- 查询标签页 -->
+  <div class="tab-content active" id="searchTab">
+    <div class="search-container">
+      <div class="search-box">
+        <input type="text" id="searchInput" placeholder="输入日语单词或句子..." />
+        <button id="searchBtn">查询</button>
+      </div>
+    </div>
+    <div class="result-area" id="resultArea">
+      <div class="empty-state" id="hintArea"></div>
+    </div>
+  </div>
+
+  <!-- 生词本标签页 -->
+  <div class="tab-content" id="favoritesTab">
+    <div class="result-area" style="padding-top:16px;">
+      <div class="section-header">
+        <span class="count" id="favCount"></span>
+      </div>
+      <div id="favoritesArea"></div>
+    </div>
+  </div>
+
+  <!-- 历史记录标签页 -->
+  <div class="tab-content" id="historyTab">
+    <div class="result-area" style="padding-top:16px;">
+      <div class="section-header">
+        <span class="count" id="historyCount"></span>
+        <button class="clear-btn" id="clearHistoryBtn">清空</button>
+      </div>
+      <div id="historyArea"></div>
+    </div>
+  </div>
+
+  <!-- 设置面板 -->
+  <div class="settings-panel" id="settingsPanel">
+    <div class="settings-content">
+      <h2 id="settingsTitle">设置</h2>
+
+      <div class="form-group">
+        <label id="lblLang">界面语言</label>
+        <select id="cfgLang">
+          <option value="zh">中文</option>
+          <option value="en">English</option>
+          <option value="ja">日本語</option>
+        </select>
+      </div>
+
+      <div class="form-group">
+        <label id="lblTheme">主题</label>
+        <div class="theme-picker">
+          <div class="theme-option active" data-theme="dark" id="themeDark">
+            <span class="theme-icon">🌙</span>深色
+          </div>
+          <div class="theme-option" data-theme="light" id="themeLight">
+            <span class="theme-icon">☀️</span>浅色
+          </div>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label id="lblFont">字体</label>
+        <select id="cfgFont">
+          <option value="system">系统默认</option>
+          <option value="sans">无衬线 (Segoe UI)</option>
+          <option value="serif">衬线 (Georgia)</option>
+          <option value="mono">等宽 (Consolas)</option>
+          <option value="yahei">微软雅黑</option>
+          <option value="source">思源黑体</option>
+        </select>
+      </div>
+
+      <div class="form-group">
+        <label id="lblHotkey">快捷键</label>
+        <input type="text" id="cfgHotkey" placeholder="Ctrl+Shift+J" readonly />
+        <div id="hotkeyHint" style="font-size:11px;color:#6e7681;margin-top:4px;"></div>
+      </div>
+
+      <div class="divider"></div>
+      <h2 style="font-size:14px;margin-bottom:12px;" id="aiTitle">AI 语法分析</h2>
+      
+      <div class="form-group">
+        <label id="lblProvider">提供商</label>
+        <select id="cfgProvider">
+          <option value="azure">Azure OpenAI</option>
+          <option value="deepseek">DeepSeek</option>
+          <option value="openai">OpenAI</option>
+          <option value="ollama">Ollama (本地)</option>
+        </select>
+      </div>
+
+      <div class="form-group">
+        <label id="lblApiKey">API Key</label>
+        <input type="password" id="cfgApiKey" placeholder="sk-..." />
+      </div>
+
+      <div class="form-group">
+        <label id="lblModel">模型</label>
+        <input type="text" id="cfgModel" placeholder="留空使用默认" />
+      </div>
+
+      <div class="form-group">
+        <label id="lblBaseUrl">API 地址</label>
+        <input type="text" id="cfgBaseUrl" placeholder="留空使用默认" />
+      </div>
+
+      <div class="form-group">
+        <label style="display:flex;align-items:center;cursor:pointer;">
+          <input type="checkbox" id="cfgEnabled" style="margin-right:8px;" />
+          <span id="lblEnableAi">启用 AI 分析</span>
+        </label>
+      </div>
+
+      <button class="btn-secondary" id="cfgClearCache" style="width:100%;margin-top:8px;">清空 AI 缓存</button>
+
+      <div class="form-actions">
+        <button class="btn-secondary" id="cfgCancel">取消</button>
+        <button class="btn-primary" id="cfgSave">保存</button>
+      </div>
+
+      <div class="status-msg" id="statusMsg">✓ 已保存</div>
+    </div>
+  </div>
+
+  <script src="i18n.js"></script>
+  <script>
+    // 当前语言
+    let currentLang = 'zh';
+
+    function t(key) {
+      return LANGS[currentLang]?.ui?.[key] || LANGS.zh.ui[key] || key;
+    }
+
+    function applyLanguage() {
+      document.getElementById('searchInput').placeholder = t('search_placeholder');
+      document.getElementById('searchBtn').textContent = t('search_btn');
+      document.getElementById('tabSearch').textContent = t('tab_search');
+      document.getElementById('tabFavorites').textContent = t('tab_favorites');
+      document.getElementById('tabHistory').textContent = t('tab_history');
+      document.getElementById('clearHistoryBtn').textContent = t('history_clear');
+      document.getElementById('settingsTitle').textContent = t('settings_title');
+      document.getElementById('lblLang').textContent = t('settings_lang');
+      document.getElementById('lblHotkey').textContent = t('settings_hotkey');
+      document.getElementById('hotkeyHint').textContent = t('settings_hotkey_hint');
+      document.getElementById('aiTitle').textContent = t('settings_ai_title');
+      document.getElementById('lblProvider').textContent = t('settings_provider');
+      document.getElementById('lblApiKey').textContent = t('settings_apikey');
+      document.getElementById('lblModel').textContent = t('settings_model');
+      document.getElementById('lblBaseUrl').textContent = t('settings_baseurl');
+      document.getElementById('lblEnableAi').textContent = t('settings_enable_ai');
+      document.getElementById('cfgCancel').textContent = t('settings_cancel');
+      document.getElementById('cfgSave').textContent = t('settings_save');
+      document.getElementById('cfgClearCache').textContent = t('cache_clear_btn');
+      updateBadge(llmBadge.classList.contains('on'));
+      updateHint();
+      updateFavoritesTab();
+    }
+
+    // 字体映射
+    const FONT_MAP = {
+      system: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif',
+      sans:   '"Segoe UI", "Helvetica Neue", Arial, sans-serif',
+      serif:  'Georgia, "Times New Roman", serif',
+      mono:   'Consolas, "Courier New", monospace',
+      yahei:  '"Microsoft YaHei", "微软雅黑", sans-serif',
+      source: '"Source Han Sans SC", "Noto Sans CJK SC", "Microsoft YaHei", sans-serif'
+    };
+
+    function applyTheme(theme) {
+      document.documentElement.setAttribute('data-theme', theme);
+      document.querySelectorAll('.theme-option').forEach(el => {
+        el.classList.toggle('active', el.dataset.theme === theme);
+      });
+    }
+
+    function applyFont(fontKey) {
+      const family = FONT_MAP[fontKey] || FONT_MAP.system;
+      document.documentElement.style.setProperty('--font-ui', family);
+    }
+
+    // 主题选择点击
+    document.querySelectorAll('.theme-option').forEach(el => {
+      el.addEventListener('click', () => applyTheme(el.dataset.theme));
+    });
+    const searchBtn = document.getElementById('searchBtn');
+    const resultArea = document.getElementById('resultArea');
+    const settingsBtn = document.getElementById('settingsBtn');
+    const settingsPanel = document.getElementById('settingsPanel');
+    const llmBadge = document.getElementById('llmBadge');
+
+    async function initLLMStatus() {
+      const enabled = await window.api.llmIsEnabled();
+      updateBadge(enabled);
+    }
+
+    function updateBadge(enabled) {
+      if (enabled) {
+        llmBadge.textContent = 'AI';
+        llmBadge.className = 'ai-status on';
+      } else {
+        llmBadge.textContent = 'AI';
+        llmBadge.className = 'ai-status off';
+      }
+    }
+
+    async function updateHint() {
+      const appCfg = await window.api.getAppConfig();
+      const hintEl = document.getElementById('hintArea');
+      if (!hintEl) return;
+      const hotkey = appCfg.hotkey || 'Ctrl+Shift+J';
+      hintEl.innerHTML = `
+        <p>${t('hint_1')}</p>
+        <p>复制后按 <kbd>${hotkey}</kbd> 快速查询</p>
+      `;
+    }
+
+    // 搜索
+    async function doSearch() {
+      const text = searchInput.value.trim();
+      if (!text) return;
+      resultArea.innerHTML = `<div class="loading"><span class="spinner"></span>${t('loading')}</div>`;
+      
+      const data = await window.api.lookup(text);
+      if (!data) {
+        resultArea.innerHTML = `<div class="empty-state">${t('no_result')}</div>`;
+        return;
+      }
+      
+      renderResults(data);
+      window.api.historyAdd(text, data.mode);
+      
+      if (data.mode === 'sentence' && data.llmPending) {
+        resultArea.insertAdjacentHTML('afterbegin', `<div class="loading" id="llmLoading"><span class="spinner"></span>AI 分析中...</div>`);
+        
+        const analysis = await window.api.llmAnalyze(text);
+        const loadingEl = document.getElementById('llmLoading');
+        if (loadingEl) loadingEl.remove();
+        
+        if (analysis) {
+          data.llmAnalysis = analysis;
+          renderResults(data);
+        }
+      }
+    }
+
+    searchBtn.addEventListener('click', doSearch);
+    searchInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') doSearch(); });
+
+    function renderResults(data) {
+      let html = '';
+
+      if (data.mode === 'word') {
+        if (data.results && data.results.length > 0) {
+          for (const item of data.results) html += renderWordEntry(item);
+        } else {
+          html += `<div class="empty-state">${t('not_in_dict')}</div>`;
+        }
+      } else {
+        if (data.llmAnalysis) {
+          html += renderTokenRow(data.tokens);
+          html += renderAIResult(data.llmAnalysis);
+          if (data.results && data.results.length > 0) {
+            html += `<details style="margin-top:12px;"><summary style="color:#6e7681;font-size:12px;cursor:pointer;">词典结果 (${data.results.length})</summary><div style="margin-top:8px;">`;
+            for (const item of data.results) html += renderWordEntry(item);
+            html += '</div></details>';
+          }
+        } else {
+          html += renderTokenRow(data.tokens);
+          if (data.results && data.results.length > 0) {
+            for (const item of data.results) html += renderWordEntry(item);
+          }
+        }
+      }
+
+      resultArea.innerHTML = html;
+      updateFavButtons();
+
+      if (data.mode === 'sentence' && !data.llmAnalysis) {
+        const aiBtn = document.createElement('button');
+        aiBtn.className = 'btn-primary';
+        aiBtn.style.cssText = 'width:100%;margin-top:12px;';
+        aiBtn.textContent = t('ai_btn');
+        aiBtn.onclick = async () => {
+          aiBtn.textContent = t('ai_analyzing');
+          aiBtn.disabled = true;
+          const analysis = await window.api.llmAnalyze(data.originalText);
+          if (analysis) {
+            data.llmAnalysis = analysis;
+            renderResults(data);
+          } else {
+            aiBtn.textContent = t('ai_failed');
+          }
+        };
+        resultArea.appendChild(aiBtn);
+      }
+    }
+
+    function renderTokenRow(tokens) {
+      if (!tokens || tokens.length === 0) return '';
+      const posMap = {
+        '名詞': 'token-noun', '動詞': 'token-verb',
+        '形容詞': 'token-adj', '形容動詞': 'token-adj',
+        '副詞': 'token-adv', '助詞': 'token-particle',
+        '助動詞': 'token-aux'
+      };
+      const spans = tokens
+        .filter(t => t.surface_form && t.surface_form.trim())
+        .map(t => {
+          const cls = posMap[t.pos] || 'token-other';
+          return `<span class="token ${cls}" title="${t.pos || ''}">${t.surface_form}</span>`;
+        }).join('');
+      return `<div class="token-row">${spans}</div>`;
+    }
+
+    function renderAIResult(a) {
+      let html = '<div class="ai-result">';
+      
+      if (a.translation) {
+        html += `<div class="ai-translation">${a.translation}</div>`;
+      }
+
+      if (a.conjugation) {
+        // conjugation 是数组：[{surface, chain}]，每词一行
+        const items = Array.isArray(a.conjugation) ? a.conjugation : [{ chain: a.conjugation }];
+        const rows = items.map(item => {
+          const chain = (item.chain || item).replace(/\s*>\s*/g, ' › ');
+          const surface = item.surface ? `<span style="color:#6e7681;font-size:11px;margin-right:6px;">${item.surface}</span>` : '';
+          return `<div class="conj-row">${surface}<span class="conj-chain">${chain}</span></div>`;
+        }).join('');
+        html += `<div class="ai-section"><div class="ai-section-title">变形</div><div class="conjugation-text">${rows}</div></div>`;
+      }
+
+      if (a.grammar && a.grammar.length > 0) {
+        html += '<div class="ai-section"><div class="ai-section-title">语法</div>';
+        for (const g of a.grammar) {
+          const badge = g.jlpt ? `<span class="badge badge-jlpt">${g.jlpt}</span>` : '';
+          html += `<div class="grammar-item"><div class="grammar-pattern">${g.pattern}${badge}</div><div class="grammar-desc">${g.explanation}</div></div>`;
+        }
+        html += '</div>';
+      }
+
+      if (a.words && a.words.length > 0) {
+        html += '<div class="ai-section"><div class="ai-section-title">词汇</div>';
+        for (const w of a.words) {
+          const badge = w.jlpt ? `<span class="badge badge-jlpt vocab-badge">${w.jlpt}</span>` : '';
+          html += `<div class="vocab-row">
+            <span class="vocab-word">${w.word}</span>
+            <span class="vocab-reading">${w.reading || ''}</span>
+            <span class="vocab-meaning">${w.meaning}</span>
+            ${badge}
+          </div>`;
+        }
+        html += '</div>';
+      }
+
+      html += '</div>';
+      return html;
+    }
+
+    function renderWordEntry(item) {
+      const word = item.kanji || item.surface || '';
+      const reading = item.reading || '';
+      const meaning = item.meaning || '';
+      const jlptBadge = item.jlpt_level ? `<span class="badge badge-jlpt">N${item.jlpt_level}</span>` : '';
+      const posBadge = item.pos ? `<span class="badge badge-pos">${item.pos}</span>` : '';
+      const favBtn = `<button class="fav-btn" data-word="${word}" data-reading="${reading}" data-meaning="${meaning.replace(/"/g, '&quot;')}" data-jlpt="${item.jlpt_level || ''}" data-pos="${item.pos || ''}">☆</button>`;
+      
+      return `<div class="word-entry">
+        <span class="word-text">${word}</span>
+        <span class="word-reading">${reading}</span>
+        <span class="word-meaning">${meaning}</span>
+        <div class="word-meta">${jlptBadge}${posBadge}${favBtn}</div>
+      </div>`;
+    }
+
+    // 收藏按钮点击事件（事件委托）
+    resultArea.addEventListener('click', async (e) => {
+      if (e.target.classList.contains('fav-btn')) {
+        const btn = e.target;
+        const item = {
+          word: btn.dataset.word,
+          reading: btn.dataset.reading,
+          meaning: btn.dataset.meaning,
+          jlpt_level: btn.dataset.jlpt ? parseInt(btn.dataset.jlpt) : null,
+          pos: btn.dataset.pos
+        };
+        
+        const result = await window.api.favoritesAdd(item);
+        if (result.success) {
+          btn.textContent = '★';
+          btn.classList.add('saved');
+          btn.title = t('fav_added');
+        } else if (result.message === 'already_exists') {
+          btn.textContent = '★';
+          btn.classList.add('saved');
+          btn.title = t('fav_added');
+        }
+      }
+    });
+
+    // 检查并更新收藏状态
+    async function updateFavButtons() {
+      const buttons = resultArea.querySelectorAll('.fav-btn');
+      for (const btn of buttons) {
+        const isFav = await window.api.favoritesCheck(btn.dataset.word);
+        if (isFav) {
+          btn.textContent = '★';
+          btn.classList.add('saved');
+          btn.title = t('fav_added');
+        }
+      }
+    }
+
+    // 标签页切换
+    document.querySelectorAll('.tab-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+        document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+        btn.classList.add('active');
+        document.getElementById(btn.dataset.tab + 'Tab').classList.add('active');
+        
+        if (btn.dataset.tab === 'favorites') {
+          loadFavorites();
+        } else if (btn.dataset.tab === 'history') {
+          loadHistoryList();
+        }
+      });
+    });
+
+    // 加载历史记录
+    async function loadHistoryList() {
+      const history = await window.api.historyGet();
+      const countEl = document.getElementById('historyCount');
+      const areaEl = document.getElementById('historyArea');
+      
+      if (!history || history.length === 0) {
+        countEl.textContent = '';
+        areaEl.innerHTML = `<div class="empty-state">${t('history_empty')}</div>`;
+        return;
+      }
+      
+      countEl.textContent = `${history.length} 条记录`;
+      
+      let html = '';
+      for (const item of history) {
+        const time = new Date(item.createdAt).toLocaleString();
+        html += `<div class="history-entry" data-text="${item.text.replace(/"/g, '&quot;')}">
+          <span class="history-text">${item.text}</span>
+          <span class="history-time">${time}</span>
+          <button class="delete-btn" data-id="${item.id}">✕</button>
+        </div>`;
+      }
+      areaEl.innerHTML = html;
+    }
+
+    // 历史记录事件委托
+    document.getElementById('historyArea').addEventListener('click', async (e) => {
+      if (e.target.classList.contains('delete-btn')) {
+        e.stopPropagation();
+        const id = parseInt(e.target.dataset.id);
+        await window.api.historyRemove(id);
+        loadHistoryList();
+        return;
+      }
+      
+      const item = e.target.closest('.history-entry');
+      if (item) {
+        const text = item.dataset.text;
+        searchInput.value = text;
+        document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+        document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+        document.getElementById('tabSearch').classList.add('active');
+        document.getElementById('searchTab').classList.add('active');
+        doSearch();
+      }
+    });
+
+    // 清空历史按钮
+    document.getElementById('clearHistoryBtn').addEventListener('click', async () => {
+      if (confirm(t('history_clear_confirm'))) {
+        await window.api.historyClear();
+        loadHistoryList();
+      }
+    });
+
+    // 加载生词本
+    async function loadFavorites() {
+      const favorites = await window.api.favoritesGet();
+      updateFavoritesTab(favorites);
+    }
+
+    // 更新生词本显示
+    async function updateFavoritesTab(favorites) {
+      if (!favorites) {
+        favorites = await window.api.favoritesGet();
+      }
+      
+      const countEl = document.getElementById('favCount');
+      const areaEl = document.getElementById('favoritesArea');
+      
+      if (!favorites || favorites.length === 0) {
+        countEl.textContent = '';
+        areaEl.innerHTML = `<div class="empty-state">${t('fav_empty')}</div>`;
+        return;
+      }
+      
+      countEl.textContent = `${favorites.length} 个单词`;
+      
+      let html = '';
+      for (const item of favorites) {
+        const jlptBadge = item.jlpt_level ? `<span class="badge badge-jlpt">N${item.jlpt_level}</span>` : '';
+        
+        html += `<div class="fav-entry" data-id="${item.id}">
+          <div>
+            <span class="fav-word">${item.word}</span>
+            <span class="fav-reading">${item.reading}</span>
+          </div>
+          <span class="fav-meaning">${item.meaning}</span>
+          <div class="fav-actions">${jlptBadge}<button class="delete-btn" data-id="${item.id}">✕</button></div>
+        </div>`;
+      }
+      areaEl.innerHTML = html;
+    }
+
+    // 生词本事件委托
+    document.getElementById('favoritesArea').addEventListener('click', async (e) => {
+      if (e.target.classList.contains('delete-btn')) {
+        const id = parseInt(e.target.dataset.id);
+        await window.api.favoritesRemove(id);
+        loadFavorites();
+      }
+    });
+
+    // 设置面板
+    settingsBtn.addEventListener('click', async () => {
+      const config = await window.api.llmGetConfig();
+      const appCfg = await window.api.getAppConfig();
+      document.getElementById('cfgLang').value = appCfg.lang || 'zh';
+      document.getElementById('cfgHotkey').value = appCfg.hotkey || 'Ctrl+Shift+J';
+      document.getElementById('cfgFont').value = appCfg.font || 'system';
+      applyTheme(appCfg.theme || 'dark'); // 同步主题选中状态
+      document.getElementById('cfgProvider').value = config.provider || 'azure';
+      document.getElementById('cfgEnabled').checked = config.enabled || false;
+      fillProviderFields(config.provider, config.providers);
+      settingsPanel.classList.add('show');
+    });
+
+    // 切换提供商时自动填充对应配置
+    document.getElementById('cfgProvider').addEventListener('change', async (e) => {
+      const config = await window.api.llmGetConfig();
+      fillProviderFields(e.target.value, config.providers);
+    });
+
+    function fillProviderFields(provider, providers) {
+      const p = providers[provider] || {};
+      document.getElementById('cfgApiKey').value = p.apiKey || '';
+      document.getElementById('cfgModel').value = p.model || '';
+      document.getElementById('cfgBaseUrl').value = p.baseUrl || '';
+    }
+
+    // 语言切换实时预览
+    document.getElementById('cfgLang').addEventListener('change', (e) => {
+      currentLang = e.target.value;
+      applyLanguage();
+    });
+
+    // 快捷键录入
+    document.getElementById('cfgHotkey').addEventListener('keydown', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (['Control', 'Shift', 'Alt', 'Meta'].includes(e.key)) return;
+      const parts = [];
+      if (e.ctrlKey) parts.push('Ctrl');
+      if (e.altKey) parts.push('Alt');
+      if (e.shiftKey) parts.push('Shift');
+      if (parts.length === 0) return;
+      let key = e.key;
+      if (key === ' ') key = 'Space';
+      if (key.length === 1) key = key.toUpperCase();
+      parts.push(key);
+      document.getElementById('cfgHotkey').value = parts.join('+');
+    });
+
+    document.getElementById('cfgCancel').addEventListener('click', () => {
+      settingsPanel.classList.remove('show');
+    });
+
+    document.getElementById('cfgClearCache').addEventListener('click', async () => {
+      const btn = document.getElementById('cfgClearCache');
+      btn.disabled = true;
+      btn.textContent = t('cache_clearing');
+      await window.api.llmClearCache();
+      btn.textContent = t('cache_cleared');
+      setTimeout(() => {
+        btn.textContent = t('cache_clear_btn');
+        btn.disabled = false;
+      }, 2000);
+    });
+
+    document.getElementById('cfgSave').addEventListener('click', async () => {
+      const newLang = document.getElementById('cfgLang').value;
+      const newHotkey = document.getElementById('cfgHotkey').value;
+      const newFont = document.getElementById('cfgFont').value;
+      const newTheme = document.querySelector('.theme-option.active')?.dataset.theme || 'dark';
+      const hotkeyResult = await window.api.setHotkey(newHotkey);
+
+      // 保存语言、主题、字体
+      await window.api.saveAppConfig({ lang: newLang, theme: newTheme, font: newFont });
+      currentLang = newLang;
+      applyFont(newFont);
+      applyLanguage();
+
+      // 保存 LLM 配置：把当前字段存到对应的 provider 下
+      const provider = document.getElementById('cfgProvider').value;
+      const currentConfig = await window.api.llmGetConfig();
+      const providers = currentConfig.providers || {};
+      providers[provider] = {
+        ...(providers[provider] || {}),
+        apiKey: document.getElementById('cfgApiKey').value,
+        model: document.getElementById('cfgModel').value,
+        baseUrl: document.getElementById('cfgBaseUrl').value
+      };
+
+      await window.api.llmSaveConfig({
+        provider: provider,
+        enabled: document.getElementById('cfgEnabled').checked,
+        providers: providers
+      });
+
+      const enabled = await window.api.llmIsEnabled();
+      updateBadge(enabled);
+
+      const msg = document.getElementById('statusMsg');
+      if (!hotkeyResult.success) {
+        msg.style.color = '#e94560';
+        msg.textContent = '⚠ ' + t('settings_hotkey_fail');
+        document.getElementById('cfgHotkey').value = hotkeyResult.hotkey;
+      } else {
+        msg.style.color = '#2ecc71';
+        msg.textContent = t('settings_saved');
+      }
+      msg.style.display = 'block';
+      setTimeout(() => { msg.style.display = 'none'; }, 3000);
+      if (hotkeyResult.success) setTimeout(() => { settingsPanel.classList.remove('show'); }, 1000);
+    });
+
+    settingsPanel.addEventListener('click', (e) => {
+      if (e.target === settingsPanel) settingsPanel.classList.remove('show');
+    });
+
+    // 初始化
+    async function init() {
+      const appCfg = await window.api.getAppConfig();
+      currentLang = appCfg.lang || 'zh';
+      // 应用主题和字体
+      applyTheme(appCfg.theme || 'dark');
+      applyFont(appCfg.font || 'system');
+      applyLanguage();
+      initLLMStatus();
+      initUpdater();
+    }
+
+    // ── 自动更新 ──────────────────────────────────────────
+    function initUpdater() {
+      const bar = document.getElementById('updateBar');
+      const msg = document.getElementById('updateMsg');
+      const actionBtn = document.getElementById('updateActionBtn');
+      const dismissBtn = document.getElementById('updateDismissBtn');
+      const progressWrap = document.getElementById('updateProgress');
+      const progressBar = document.getElementById('updateProgressBar');
+      const progressText = document.getElementById('updateProgressText');
+
+      function showBar() { bar.style.display = 'flex'; }
+      function hideBar() { bar.style.display = 'none'; }
+
+      dismissBtn.addEventListener('click', hideBar);
+
+      window.api.onUpdateAvailable((info) => {
+        msg.textContent = `发现新版本 v${info.version}，是否下载？`;
+        actionBtn.textContent = '下载';
+        actionBtn.style.display = 'inline-block';
+        actionBtn.onclick = () => {
+          actionBtn.style.display = 'none';
+          progressWrap.style.display = 'flex';
+          msg.textContent = '正在下载更新...';
+          window.api.downloadUpdate();
+        };
+        showBar();
+      });
+
+      window.api.onUpdateDownloadProgress((p) => {
+        progressBar.style.width = p.percent + '%';
+        progressText.textContent = p.percent + '%';
+      });
+
+      window.api.onUpdateDownloaded((info) => {
+        progressWrap.style.display = 'none';
+        msg.textContent = `v${info.version} 已下载，重启后生效`;
+        actionBtn.textContent = '立即重启';
+        actionBtn.style.display = 'inline-block';
+        actionBtn.onclick = () => window.api.installUpdate();
+        showBar();
+      });
+
+      window.api.onUpdateError((errMsg) => {
+        console.warn('Update error:', errMsg);
+      });
+    }
+
+    init();
+  </script>
+</body>
+</html>
+

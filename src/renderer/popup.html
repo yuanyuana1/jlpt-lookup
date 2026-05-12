@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>JLPT Popup</title>
+  <style>
+    :root, [data-theme="dark"] {
+      --bg-base:    #0d1117;
+      --bg-surface: #161b22;
+      --bg-input:   #21262d;
+      --border:     #21262d;
+      --border-sub: #30363d;
+      --text-primary:   #e6edf3;
+      --text-secondary: #c9d1d9;
+      --text-muted:     #8b949e;
+      --text-faint:     #6e7681;
+      --accent:     #58a6ff;
+      --accent-bg:  #388bfd26;
+      --purple-bg:  #a371f726;
+      --purple:     #a371f7;
+      --orange:     #f0883e;
+      --scrollbar:  #30363d;
+    }
+    [data-theme="light"] {
+      --bg-base:    #ffffff;
+      --bg-surface: #f6f8fa;
+      --bg-input:   #f6f8fa;
+      --border:     #d0d7de;
+      --border-sub: #d0d7de;
+      --text-primary:   #1f2328;
+      --text-secondary: #24292f;
+      --text-muted:     #57606a;
+      --text-faint:     #6e7781;
+      --accent:     #0969da;
+      --accent-bg:  #0969da1a;
+      --purple-bg:  #8250df1a;
+      --purple:     #8250df;
+      --orange:     #bc4c00;
+      --scrollbar:  #d0d7de;
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: var(--font-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif);
+      background: var(--bg-base);
+      color: var(--text-primary);
+      height: 100vh; display: flex; flex-direction: column;
+      border: 1px solid var(--border-sub);
+      border-radius: 10px; overflow: hidden;
+    }
+    .topbar { display: flex; justify-content: space-between; align-items: center; padding: 10px 14px; border-bottom: 1px solid var(--border); background: var(--bg-surface); flex-shrink: 0; -webkit-app-region: drag; user-select: none; }
+    .query-text { font-size: 17px; font-weight: 600; color: var(--text-primary); }
+    .close-btn { background: none; border: none; color: var(--text-faint); cursor: pointer; font-size: 16px; padding: 4px 8px; border-radius: 6px; line-height: 1; -webkit-app-region: no-drag; }
+    .close-btn:hover { background: var(--bg-input); color: var(--text-primary); }
+    .scroll-area { flex: 1; overflow-y: auto; padding: 12px 14px; }
+    .scroll-area::-webkit-scrollbar { width: 5px; }
+    .scroll-area::-webkit-scrollbar-thumb { background: var(--scrollbar); border-radius: 3px; }
+    .word-entry { display: flex; align-items: baseline; gap: 8px; padding: 5px 0; border-bottom: 1px solid var(--border); }
+    .word-entry:last-child { border-bottom: none; }
+    .word-left { display: contents; }
+    .word-text    { font-size: 14px; font-weight: 500; color: var(--text-primary); flex-shrink: 0; }
+    .word-reading { font-size: 12px; color: var(--text-faint); flex-shrink: 0; }
+    .word-meaning { flex: 1; font-size: 13px; color: var(--text-muted); }
+    .word-badges  { display: flex; gap: 4px; flex-shrink: 0; align-items: center; }
+    .badge { font-size: 10px; padding: 2px 6px; border-radius: 4px; font-weight: 600; }
+    .badge-jlpt { background: var(--accent-bg); color: var(--accent); }
+    .badge-pos  { background: var(--purple-bg); color: var(--purple); }
+    .token-row { display: flex; flex-wrap: wrap; gap: 2px; padding: 10px 0 12px; border-bottom: 1px solid var(--border); }
+    .token { font-size: 15px; padding: 2px 4px; border-radius: 3px; cursor: default; position: relative; }
+    .token-noun     { color: var(--text-primary); border-bottom: 2px solid var(--accent); }
+    .token-verb     { color: var(--text-primary); border-bottom: 2px solid #3fb950; }
+    .token-adj      { color: var(--text-primary); border-bottom: 2px solid var(--orange); }
+    .token-adv      { color: var(--text-primary); border-bottom: 2px solid var(--purple); }
+    .token-particle { color: var(--text-faint); }
+    .token-aux      { color: var(--text-faint); }
+    .token-other    { color: var(--text-secondary); }
+    .ai-translation { font-size: 15px; color: var(--text-primary); line-height: 1.6; padding: 10px 0; border-bottom: 1px solid var(--border); }
+    .section-title { font-size: 10px; font-weight: 600; color: var(--text-faint); text-transform: uppercase; letter-spacing: 0.6px; margin: 12px 0 6px; }
+    .conjugation-text { font-size: 13px; padding: 8px 10px; background: var(--bg-surface); border-radius: 6px; border-left: 3px solid var(--accent); }
+    .conj-row { display: flex; align-items: center; padding: 3px 0; border-bottom: 1px solid var(--border); }
+    .conj-row:last-child { border-bottom: none; }
+    .conj-chain { color: var(--text-secondary); font-size: 13px; }
+    .grammar-item { padding: 8px 0; border-bottom: 1px solid var(--border); }
+    .grammar-item:last-child { border-bottom: none; }
+    .grammar-pattern { font-size: 13px; font-weight: 500; color: var(--accent); }
+    .grammar-pattern .badge { margin-left: 6px; vertical-align: middle; }
+    .grammar-desc { font-size: 12px; color: var(--text-muted); margin-top: 3px; line-height: 1.5; }
+    .vocab-row { display: flex; align-items: baseline; gap: 8px; padding: 5px 0; border-bottom: 1px solid var(--border); }
+    .vocab-row:last-child { border-bottom: none; }
+    .vocab-word    { font-size: 14px; font-weight: 500; color: var(--text-primary); flex-shrink: 0; }
+    .vocab-reading { font-size: 12px; color: var(--text-faint); flex-shrink: 0; }
+    .vocab-meaning { font-size: 13px; color: var(--text-muted); flex: 1; }
+    .vocab-badge   { flex-shrink: 0; }
+    .loading { display: flex; align-items: center; gap: 8px; color: var(--text-faint); font-size: 12px; padding: 10px 0; }
+    .spinner { width: 13px; height: 13px; border: 2px solid var(--border-sub); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.6s linear infinite; flex-shrink: 0; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .no-result { color: var(--text-faint); text-align: center; padding: 24px; font-size: 13px; }
+  </style>
+</head>
+<body>
+  <div class="topbar">
+    <span class="query-text" id="originalText"></span>
+    <button class="close-btn" id="closeBtn">✕</button>
+  </div>
+  <div class="scroll-area" id="content">
+    <div class="no-result">查询中...</div>
+  </div>
+
+  <script>
+    const originalText = document.getElementById('originalText');
+    const content = document.getElementById('content');
+    document.getElementById('closeBtn').addEventListener('click', () => window.api.closePopup());
+
+    // 同步主题和字体
+    window.api.getAppConfig().then(cfg => {
+      if (cfg.theme) document.documentElement.setAttribute('data-theme', cfg.theme);
+      const fontMap = {
+        system: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif',
+        sans:   '"Segoe UI", "Helvetica Neue", Arial, sans-serif',
+        serif:  'Georgia, "Times New Roman", serif',
+        mono:   'Consolas, "Courier New", monospace',
+        yahei:  '"Microsoft YaHei", "微软雅黑", sans-serif',
+        source: '"Source Han Sans SC", "Noto Sans CJK SC", "Microsoft YaHei", sans-serif'
+      };
+      if (cfg.font && fontMap[cfg.font]) {
+        document.documentElement.style.setProperty('--font-ui', fontMap[cfg.font]);
+      }
+    });
+
+    let currentData = null;
+
+    window.api.onLookupResult((data) => {
+      currentData = data;
+      originalText.textContent = data.originalText;
+      if (data.mode === 'word') {
+        renderWordMode(data);
+      } else {
+        renderSentenceMode(data);
+      }
+    });
+
+    window.api.onLLMResult((analysis) => {
+      if (currentData) {
+        currentData.llmAnalysis = analysis;
+        currentData.loading = false;
+        renderSentenceMode(currentData);
+      }
+    });
+
+    // 词性 → CSS class 映射
+    function posClass(pos) {
+      if (!pos) return 'token-other';
+      if (pos === '名詞') return 'token-noun';
+      if (pos === '動詞') return 'token-verb';
+      if (pos === '形容詞' || pos === '形容動詞') return 'token-adj';
+      if (pos === '副詞') return 'token-adv';
+      if (pos === '助詞') return 'token-particle';
+      if (pos === '助動詞') return 'token-aux';
+      return 'token-other';
+    }
+
+    // 渲染分词行
+    function renderTokenRow(tokens) {
+      if (!tokens || tokens.length === 0) return '';
+      const spans = tokens
+        .filter(t => t.surface_form && t.surface_form.trim())
+        .map(t => `<span class="token ${posClass(t.pos)}" title="${t.pos || ''}">${t.surface_form}</span>`)
+        .join('');
+      return `<div class="token-row">${spans}</div>`;
+    }
+
+    // 单词模式
+    function renderWordMode(data) {
+      if (!data.results || data.results.length === 0) {
+        content.innerHTML = '<div class="no-result">词典中暂无此词条</div>';
+        return;
+      }
+      content.innerHTML = data.results.map(item => renderWordEntry(item)).join('');
+    }
+
+    function renderWordEntry(item) {
+      const word = item.kanji || item.surface || '';
+      const jlpt = item.jlpt_level ? `<span class="badge badge-jlpt">N${item.jlpt_level}</span>` : '';
+      const pos  = item.pos ? `<span class="badge badge-pos">${item.pos}</span>` : '';
+      return `<div class="word-entry">
+        <span class="word-text">${word}</span>
+        <span class="word-reading">${item.reading || ''}</span>
+        <span class="word-meaning">${item.meaning || ''}</span>
+        <div class="word-badges">${jlpt}${pos}</div>
+      </div>`;
+    }
+
+    // 句子模式
+    function renderSentenceMode(data) {
+      let html = '';
+
+      // 分词行始终显示（无论 LLM 是否完成）
+      html += renderTokenRow(data.tokens);
+
+      if (data.llmAnalysis) {
+        const a = data.llmAnalysis;
+
+        if (a.translation) {
+          html += `<div class="ai-translation">${a.translation}</div>`;
+        }
+
+        if (a.conjugation) {
+          const items = Array.isArray(a.conjugation) ? a.conjugation : [{ chain: a.conjugation }];
+          const rows = items.map(item => {
+            const chain = (item.chain || item).replace(/\s*>\s*/g, ' › ');
+            const surface = item.surface ? `<span style="color:#6e7681;font-size:11px;margin-right:6px;">${item.surface}</span>` : '';
+            return `<div class="conj-row">${surface}<span class="conj-chain">${chain}</span></div>`;
+          }).join('');
+          html += `<div class="section-title">变形</div><div class="conjugation-text">${rows}</div>`;
+        }
+
+        if (a.grammar && a.grammar.length > 0) {
+          html += '<div class="section-title">语法</div>';
+          for (const g of a.grammar) {
+            const badge = g.jlpt ? `<span class="badge badge-jlpt">${g.jlpt}</span>` : '';
+            html += `<div class="grammar-item">
+              <div class="grammar-pattern">${g.pattern}${badge}</div>
+              <div class="grammar-desc">${g.explanation}</div>
+            </div>`;
+          }
+        }
+
+        if (a.words && a.words.length > 0) {
+          html += '<div class="section-title">词汇</div>';
+          for (const w of a.words) {
+            const badge = w.jlpt ? `<span class="badge badge-jlpt vocab-badge">${w.jlpt}</span>` : '';
+            html += `<div class="vocab-row">
+              <span class="vocab-word">${w.word}</span>
+              <span class="vocab-reading">${w.reading || ''}</span>
+              <span class="vocab-meaning">${w.meaning}</span>
+              ${badge}
+            </div>`;
+          }
+        }
+
+      } else if (data.loading) {
+        html += '<div class="loading"><span class="spinner"></span>AI 分析中...</div>';
+      } else {
+        if (data.results && data.results.length > 0) {
+          html += data.results.map(item => renderWordEntry(item)).join('');
+        } else {
+          html += '<div class="no-result">词典中暂无此词条</div>';
+        }
+      }
+
+      content.innerHTML = html;
+    }
+  </script>
+</body>
+</html>
+
