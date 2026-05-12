@@ -3,7 +3,7 @@ const path = require('path');
 const fs = require('fs');
 const { lookupWord, lookupGrammar } = require('./dictionary');
 const { tokenize } = require('./tokenizer');
-const { loadConfig, saveConfig, getConfig, isLLMEnabled, analyzeSentence, clearCache } = require('./llm');
+const { loadConfig, saveConfig, getConfig, isLLMEnabled, analyzeSentence, clearCache, getFromCache } = require('./llm');
 const { loadFavorites, getFavorites, addFavorite, removeFavorite, updateFavoriteNote, isFavorite, clearFavorites } = require('./favorites');
 const { loadHistory, getHistory, addHistory, removeHistory, clearHistory } = require('./history');
 const { getUserDataPath } = require('./paths');
@@ -184,17 +184,14 @@ function createMainWindow() {
   });
 }
 
-function createPopupWindow(x, y) {
-  if (popupWindow) {
-    popupWindow.close();
-    popupWindow = null;
-  }
+// 弹窗管理：单例预加载模式
+let popupReady = false;
 
+function preloadPopup() {
+  if (popupWindow && !popupWindow.isDestroyed()) return;
   popupWindow = new BrowserWindow({
     width: 480,
     height: 450,
-    x: x,
-    y: y,
     show: false,
     frame: false,
     alwaysOnTop: true,
@@ -209,20 +206,26 @@ function createPopupWindow(x, y) {
       nodeIntegration: false
     }
   });
-
+  popupReady = false;
   popupWindow.loadFile(path.join(__dirname, '../renderer/popup.html'));
-
-  // 点击弹窗外部时关闭（延迟一下避免刚创建就被关）
-  let canClose = false;
-  setTimeout(() => { canClose = true; }, 500);
-  popupWindow.on('blur', () => {
-    if (popupWindow && canClose) {
-      popupWindow.close();
-      popupWindow = null;
-    }
+  popupWindow.webContents.once('did-finish-load', () => {
+    popupReady = true;
   });
+  popupWindow.on('closed', () => {
+    popupWindow = null;
+    popupReady = false;
+    setTimeout(preloadPopup, 200);
+  });
+}
 
-  return popupWindow;
+function hidePopup() {
+  if (!popupWindow || popupWindow.isDestroyed()) return;
+  popupWindow.hide();
+  popupReady = false;
+  popupWindow.loadFile(path.join(__dirname, '../renderer/popup.html'));
+  popupWindow.webContents.once('did-finish-load', () => {
+    popupReady = true;
+  });
 }
 
 function createTray() {
@@ -241,7 +244,6 @@ function createTray() {
 
 // 处理划词查询
 async function handleLookup() {
-  // 直接读取剪贴板内容（用户需要先 Ctrl+C 复制）
   const text = clipboard.readText().trim();
   
   if (!text || text.length === 0) return;
@@ -266,42 +268,68 @@ async function handleLookup() {
           ...entry,
           surface: token.surface_form,
           reading: token.reading,
-          pos: token.pos
+          pos: entry.pos || token.pos
         });
       }
     }
 
-    // 句子模式：先发起 LLM 请求（不等待），同时创建弹窗
+    // 同步检查缓存，命中则直接用，否则异步请求
+    let llmResult = null;
     let llmPromise = null;
     if (isSentence && isLLMEnabled()) {
-      llmPromise = analyzeSentence(text);
+      llmResult = getFromCache(text);
+      if (!llmResult) {
+        llmPromise = analyzeSentence(text);
+      }
     }
 
-    // 获取鼠标位置并创建弹窗
     const { screen } = require('electron');
-    const mousePos = screen.getCursorScreenPoint();
-    const popup = createPopupWindow(mousePos.x + 10, mousePos.y + 10);
-    
-    popup.webContents.once('did-finish-load', () => {
-      popup.webContents.send('lookup-result', {
+    const display = screen.getPrimaryDisplay();
+    const { width, height } = display.workAreaSize;
+    const winW = 480, winH = 450;
+    const x = Math.round((width - winW) / 2);
+    const y = Math.round((height - winH) / 2);
+
+    const showPopup = () => {
+      if (!popupWindow || popupWindow.isDestroyed()) return;
+
+      popupWindow.setPosition(x, y);
+
+      popupWindow.removeAllListeners('blur');
+      let canClose = false;
+      setTimeout(() => { canClose = true; }, 500);
+      popupWindow.on('blur', () => {
+        if (canClose) hidePopup();
+      });
+
+      popupWindow.webContents.send('lookup-result', {
         mode: isSentence ? 'sentence' : 'word',
         originalText: text,
-        tokens: tokens,
-        results: results,
-        llmAnalysis: null,
+        tokens,
+        results,
+        llmAnalysis: llmResult,
         loading: !!llmPromise
       });
-      popup.show();
+      popupWindow.show();
 
-      // LLM 结果到达后更新弹窗
       if (llmPromise) {
-        llmPromise.then(llmAnalysis => {
-          if (popup && !popup.isDestroyed()) {
-            popup.webContents.send('llm-result', llmAnalysis);
+        llmPromise.then(analysis => {
+          if (popupWindow && !popupWindow.isDestroyed() && popupWindow.isVisible()) {
+            popupWindow.webContents.send('llm-result', analysis);
           }
         });
       }
-    });
+    };
+
+    if (popupReady) {
+      showPopup();
+    } else {
+      if (!popupWindow || popupWindow.isDestroyed()) preloadPopup();
+      popupWindow.webContents.once('did-finish-load', () => {
+        popupReady = true;
+        showPopup();
+      });
+    }
   } catch (err) {
     console.error('Lookup error:', err);
   }
@@ -322,8 +350,10 @@ app.whenReady().then(async () => {
   const { initDictionary } = require('./dictionary');
   await initDictionary();
 
-  // 加载 LLM 配置
+  // 加载 LLM 配置（同时预热，避免第一次查询时懒加载阻塞）
   loadConfig();
+  isLLMEnabled();
+  getFromCache('__warmup__');
 
   // 加载收藏
   loadFavorites();
@@ -339,6 +369,9 @@ app.whenReady().then(async () => {
   createAppMenu();
 
   registerHotkey(appConfig.hotkey);
+
+  // 预加载弹窗，避免首次触发快捷键时等待页面加载
+  preloadPopup();
 
   console.log(`JLPT Lookup started. Use ${appConfig.hotkey} to look up selected Japanese text.`);
 
@@ -373,7 +406,7 @@ ipcMain.handle('lookup', async (event, text) => {
           ...entry,
           surface: token.surface_form,
           reading: token.reading,
-          pos: token.pos
+          pos: entry.pos || token.pos
         });
       }
     }
@@ -390,7 +423,7 @@ ipcMain.handle('lookup', async (event, text) => {
           ...entry,
           surface: token.surface_form,
           reading: token.reading,
-          pos: token.pos
+          pos: entry.pos || token.pos
         });
       }
     }
@@ -399,10 +432,7 @@ ipcMain.handle('lookup', async (event, text) => {
 });
 
 ipcMain.handle('close-popup', () => {
-  if (popupWindow) {
-    popupWindow.close();
-    popupWindow = null;
-  }
+  hidePopup();
 });
 
 // LLM 相关 IPC

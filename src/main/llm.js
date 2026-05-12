@@ -35,7 +35,8 @@ const DEFAULT_CONFIG = {
     deepseek: {
       apiKey: '',
       model: 'deepseek-v4-flash',
-      baseUrl: 'https://api.deepseek.com'
+      baseUrl: 'https://api.deepseek.com',
+      thinking: false
     },
     openai: {
       apiKey: '',
@@ -262,8 +263,8 @@ function buildSystemPrompt(text) {
   // 短文本（单词/短语）：简洁分析
   if (text.length <= 10) {
     return `你是日语语法专家。分析日语文本，返回JSON（不要其他文字）：
-{"translation":"中文翻译","grammar":[{"pattern":"语法名","jlpt":"N?","explanation":"简短解释"}],"conjugation":[{"surface":"表层形","chain":"原形>变形1>最终形"}]}
-conjugation：有变形的词才列，chain用>连接各步骤。`;
+{"translation":"中文翻译","grammar":[{"pattern":"语法名","jlpt":"N?","explanation":"简短解释"}],"conjugation":[{"surface":"表层形","base":"原形","form":"变形名称（如：ます形、て形、た形、ない形、意志形等）"}]}
+conjugation：有变形的词才列，form填写该词在句中的变形名称。`;
   }
 
   // 长文本（句子）：完整分析
@@ -271,13 +272,13 @@ conjugation：有变形的词才列，chain用>连接各步骤。`;
 {
   "translation": "自然流畅的中文翻译",
   "words": [
-    {"word":"词形","reading":"假名","meaning":"中文释义","jlpt":"N?"}
+    {"word":"词形","reading":"假名","meaning":"中文释义","jlpt":"N?","pos":"词性标注（动1/动2/动3/い形/な形/名/副/接/感）"}
   ],
   "grammar": [
     {"pattern":"语法/句型名称","jlpt":"N?","explanation":"详细解释该语法的含义和用法","usage":"在本句中的具体用法"}
   ],
   "conjugation": [
-    {"surface":"句中出现的形式","chain":"辞书形>中间形>最终形"}
+    {"surface":"句中出现的形式","base":"原形（辞书形）","form":"变形名称（如：ます形、て形、た形、ない形、意志形、命令形、条件形等）"}
   ]
 }
 
@@ -289,8 +290,9 @@ conjugation：有变形的词才列，chain用>连接各步骤。`;
    - 敬语表达（丁寧語、謙譲語、尊敬語）
    - 句型结构（〜の方々、〜に送付する等）
    - 任何N5-N1的语法点，宁多勿少
-3. conjugation：有活用变形的词才列，chain用>连接每一步
-4. jlpt：不确定时填null，不要乱猜`;
+3. conjugation：有活用变形的词才列，surface填句中实际形式，base填原形，form填变形名称
+4. pos：动词填动1（五段）/动2（一段）/动3（する/くる），形容词填い形/な形，其他填名/副/接/感，不确定填null
+5. jlpt：不确定时填null，不要乱猜`;
 }
 
 /**
@@ -332,9 +334,19 @@ async function analyzeSentence(text) {
             { role: 'user', content: text }
           ],
           temperature: 0.2,
-          max_tokens: text.length <= 10 ? 600 : 2000,
-          stream: false
+          max_tokens: text.length <= 10 ? 1000 : 4000,
+          stream: false,
+          // DeepSeek thinking 模式控制
+          ...(config.provider === 'deepseek' ? {
+            thinking: { type: p.thinking ? 'enabled' : 'disabled' }
+          } : {})
         });
+
+        // 检查是否因 token 不足被截断
+        const finishReason = completion.choices[0].finish_reason;
+        if (finishReason === 'length') {
+          console.warn(`LLM response truncated (finish_reason=length), text: "${text.substring(0, 30)}"`);
+        }
 
         const content = completion.choices[0].message.content;
         const result = parseResponse(content);
@@ -397,6 +409,14 @@ function parseResponse(responseText) {
   } catch (e) {
     console.error('JSON parse failed:', e.message);
     console.error('Raw response:', responseText.substring(0, 500));
+
+    // 降级：JSON 被截断时，尝试只提取 translation 字段
+    const translationMatch = responseText.match(/"translation"\s*:\s*"((?:[^"\\]|\\.)*)"/);
+    if (translationMatch) {
+      console.log('Partial parse: extracted translation only');
+      return { translation: translationMatch[1], _partial: true };
+    }
+
     return null;
   }
 }
@@ -408,5 +428,6 @@ module.exports = {
   isLLMEnabled,
   analyzeSentence,
   clearCache,
+  getFromCache,
   PROVIDER_DEFAULTS
 };

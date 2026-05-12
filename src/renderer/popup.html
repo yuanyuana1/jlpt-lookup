@@ -125,6 +125,9 @@
       if (cfg.font && fontMap[cfg.font]) {
         document.documentElement.style.setProperty('--font-ui', fontMap[cfg.font]);
       }
+      if (cfg.fontSize) {
+        document.body.style.zoom = cfg.fontSize / 13;
+      }
     });
 
     let currentData = null;
@@ -146,6 +149,34 @@
         renderSentenceMode(currentData);
       }
     });
+
+    // 词性格式化
+    function formatPos(pos) {
+      if (!pos) return '';
+      if (pos === '名詞' || pos === '名詞・普通名詞') return '名';
+      if (pos === '動詞' || pos === '動詞・一般') return '动';
+      if (pos === '形容詞' || pos === '形容詞・一般') return 'い形';
+      if (pos === '形容動詞' || pos === 'ナ形容詞') return 'な形';
+      if (pos === '副詞') return '副';
+      if (pos === '接続詞') return '接';
+      if (pos === '感動詞') return '感';
+      if (pos === '助詞') return '助';
+      if (pos === '代名詞') return '代';
+      if (pos.includes('五段') || pos.startsWith('v5')) return '动1';
+      if (pos.includes('一段') || pos === 'v1') return '动2';
+      if (pos.includes('サ変') || pos === 'vs' || pos === 'vs-i') return '动3';
+      if (pos.includes('カ変') || pos === 'vk') return '动3';
+      if (pos.includes('い形') || pos === 'adj-i') return 'い形';
+      if (pos.includes('な形') || pos === 'adj-na') return 'な形';
+      if (pos === '名词' || pos === 'n') return '名';
+      if (pos === '副词' || pos === 'adv') return '副';
+      if (pos === '接续词' || pos === 'conj') return '接';
+      if (pos === '感叹词' || pos === 'int') return '感';
+      if (pos === '助词' || pos === 'prt') return '助';
+      if (pos === '代词' || pos === 'pn') return '代';
+      if (pos.includes('动词') || pos.startsWith('v')) return '动';
+      return pos;
+    }
 
     // 词性 → CSS class 映射
     function posClass(pos) {
@@ -181,7 +212,8 @@
     function renderWordEntry(item) {
       const word = item.kanji || item.surface || '';
       const jlpt = item.jlpt_level ? `<span class="badge badge-jlpt">N${item.jlpt_level}</span>` : '';
-      const pos  = item.pos ? `<span class="badge badge-pos">${item.pos}</span>` : '';
+      const posText = formatPos(item.pos);
+      const pos  = posText ? `<span class="badge badge-pos">[${posText}]</span>` : '';
       return `<div class="word-entry">
         <span class="word-text">${word}</span>
         <span class="word-reading">${item.reading || ''}</span>
@@ -205,11 +237,19 @@
         }
 
         if (a.conjugation) {
-          const items = Array.isArray(a.conjugation) ? a.conjugation : [{ chain: a.conjugation }];
+          const items = Array.isArray(a.conjugation) ? a.conjugation : [];
           const rows = items.map(item => {
-            const chain = (item.chain || item).replace(/\s*>\s*/g, ' › ');
-            const surface = item.surface ? `<span style="color:#6e7681;font-size:11px;margin-right:6px;">${item.surface}</span>` : '';
-            return `<div class="conj-row">${surface}<span class="conj-chain">${chain}</span></div>`;
+            if (item.chain) {
+              const chain = item.chain.replace(/\s*>\s*/g, ' → ');
+              const surface = item.surface ? `<span style="color:var(--text-primary);font-weight:500;">${item.surface}</span>` : '';
+              return `<div class="conj-row">${surface}<span class="conj-chain" style="color:var(--text-muted);margin-left:6px;">${chain}</span></div>`;
+            }
+            const surface = item.surface || '';
+            const form = item.form || '';
+            const base = item.base || '';
+            const formTag = form ? `<span style="color:var(--text-faint);font-size:12px;">（${form}）</span>` : '';
+            const baseHint = base ? `<span style="color:var(--text-muted);font-size:12px;margin-left:8px;">← ${base}</span>` : '';
+            return `<div class="conj-row"><span style="color:var(--text-primary);font-weight:500;">${surface}</span>${formTag}${baseHint}</div>`;
           }).join('');
           html += `<div class="section-title">变形</div><div class="conjugation-text">${rows}</div>`;
         }
@@ -229,9 +269,12 @@
           html += '<div class="section-title">词汇</div>';
           for (const w of a.words) {
             const badge = w.jlpt ? `<span class="badge badge-jlpt vocab-badge">${w.jlpt}</span>` : '';
+            const posText = formatPos(w.pos);
+            const posBadge = posText ? `<span style="color:var(--text-faint);font-size:12px;">[${posText}]</span>` : '';
             html += `<div class="vocab-row">
               <span class="vocab-word">${w.word}</span>
               <span class="vocab-reading">${w.reading || ''}</span>
+              ${posBadge}
               <span class="vocab-meaning">${w.meaning}</span>
               ${badge}
             </div>`;

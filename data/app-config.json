@@ -2,5 +2,6 @@
   "hotkey": "Ctrl+Shift+C",
   "lang": "zh",
   "theme": "light",
-  "font": "system"
+  "font": "system",
+  "fontSize": 15
 }

@@ -272,6 +272,14 @@
       </div>
 
       <div class="form-group">
+        <label id="lblFontSize">字体大小</label>
+        <div style="display:flex;align-items:center;gap:10px;">
+          <input type="range" id="cfgFontSize" min="11" max="18" step="1" style="flex:1;" />
+          <span id="cfgFontSizeVal" style="font-size:12px;color:var(--text-muted);width:32px;text-align:right;flex-shrink:0;">13px</span>
+        </div>
+      </div>
+
+      <div class="form-group">
         <label id="lblHotkey">快捷键</label>
         <input type="text" id="cfgHotkey" placeholder="Ctrl+Shift+J" readonly />
         <div id="hotkeyHint" style="font-size:11px;color:#6e7681;margin-top:4px;"></div>
@@ -303,6 +311,28 @@
       <div class="form-group">
         <label id="lblBaseUrl">API 地址</label>
         <input type="text" id="cfgBaseUrl" placeholder="留空使用默认" />
+      </div>
+
+      <!-- Azure 专属字段 -->
+      <div id="azureFields">
+        <div class="form-group">
+          <label>Deployment 名称</label>
+          <input type="text" id="cfgAzureDeployment" placeholder="gpt-4.1" />
+        </div>
+        <div class="form-group">
+          <label>API Version</label>
+          <input type="text" id="cfgAzureApiVersion" placeholder="2025-01-01-preview" />
+        </div>
+      </div>
+
+      <!-- DeepSeek 专属字段 -->
+      <div id="deepseekFields" style="display:none;">
+        <div class="form-group">
+          <label style="display:flex;align-items:center;cursor:pointer;">
+            <input type="checkbox" id="cfgDeepseekThinking" style="margin-right:8px;" />
+            <span>启用 Thinking 模式（更准确但更慢）</span>
+          </label>
+        </div>
       </div>
 
       <div class="form-group">
@@ -389,9 +419,23 @@
       document.documentElement.style.setProperty('--font-ui', family);
     }
 
+    function applyFontSize(size) {
+      const px = parseInt(size) || 13;
+      // 以 13px 为基准计算缩放比例，zoom 会等比缩放整个 UI
+      const zoom = px / 13;
+      document.body.style.zoom = zoom;
+    }
+
     // 主题选择点击
     document.querySelectorAll('.theme-option').forEach(el => {
       el.addEventListener('click', () => applyTheme(el.dataset.theme));
+    });
+
+    // 字号滑块实时预览
+    document.getElementById('cfgFontSize').addEventListener('input', (e) => {
+      const val = e.target.value;
+      document.getElementById('cfgFontSizeVal').textContent = val + 'px';
+      applyFontSize(val);
     });
     const searchBtn = document.getElementById('searchBtn');
     const resultArea = document.getElementById('resultArea');
@@ -531,12 +575,24 @@
       }
 
       if (a.conjugation) {
-        // conjugation 是数组：[{surface, chain}]，每词一行
-        const items = Array.isArray(a.conjugation) ? a.conjugation : [{ chain: a.conjugation }];
+        // conjugation 新格式：[{surface, base, form}]
+        const items = Array.isArray(a.conjugation) ? a.conjugation : [];
         const rows = items.map(item => {
-          const chain = (item.chain || item).replace(/\s*>\s*/g, ' › ');
-          const surface = item.surface ? `<span style="color:#6e7681;font-size:11px;margin-right:6px;">${item.surface}</span>` : '';
-          return `<div class="conj-row">${surface}<span class="conj-chain">${chain}</span></div>`;
+          // 兼容旧格式 chain
+          if (item.chain) {
+            const chain = item.chain.replace(/\s*>\s*/g, ' → ');
+            const surface = item.surface ? `<span style="color:var(--text-primary);font-weight:500;">${item.surface}</span>` : '';
+            return `<div class="conj-row">${surface}<span class="conj-chain" style="color:var(--text-muted);margin-left:6px;">${chain}</span></div>`;
+          }
+          // 新格式：投入します（ます形）
+          const base = item.base || '';
+          const form = item.form || '';
+          const surface = item.surface || '';
+          const formTag = form ? `<span style="color:var(--text-faint);font-size:12px;">（${form}）</span>` : '';
+          const baseHint = base ? `<span style="color:var(--text-muted);font-size:12px;margin-left:8px;">← ${base}</span>` : '';
+          return `<div class="conj-row">
+            <span style="color:var(--text-primary);font-weight:500;">${surface}</span>${formTag}${baseHint}
+          </div>`;
         }).join('');
         html += `<div class="ai-section"><div class="ai-section-title">变形</div><div class="conjugation-text">${rows}</div></div>`;
       }
@@ -553,12 +609,15 @@
       if (a.words && a.words.length > 0) {
         html += '<div class="ai-section"><div class="ai-section-title">词汇</div>';
         for (const w of a.words) {
-          const badge = w.jlpt ? `<span class="badge badge-jlpt vocab-badge">${w.jlpt}</span>` : '';
+          const jlptBadge = w.jlpt ? `<span class="badge badge-jlpt vocab-badge">${w.jlpt}</span>` : '';
+          const posText = formatPos(w.pos);
+          const posBadge = posText ? `<span style="color:var(--text-faint);font-size:12px;flex-shrink:0;">[${posText}]</span>` : '';
           html += `<div class="vocab-row">
             <span class="vocab-word">${w.word}</span>
             <span class="vocab-reading">${w.reading || ''}</span>
+            ${posBadge}
             <span class="vocab-meaning">${w.meaning}</span>
-            ${badge}
+            ${jlptBadge}
           </div>`;
         }
         html += '</div>';
@@ -573,7 +632,7 @@
       const reading = item.reading || '';
       const meaning = item.meaning || '';
       const jlptBadge = item.jlpt_level ? `<span class="badge badge-jlpt">N${item.jlpt_level}</span>` : '';
-      const posBadge = item.pos ? `<span class="badge badge-pos">${item.pos}</span>` : '';
+      const posBadge = item.pos ? `<span class="badge badge-pos">${formatPos(item.pos)}</span>` : '';
       const favBtn = `<button class="fav-btn" data-word="${word}" data-reading="${reading}" data-meaning="${meaning.replace(/"/g, '&quot;')}" data-jlpt="${item.jlpt_level || ''}" data-pos="${item.pos || ''}">☆</button>`;
       
       return `<div class="word-entry">
@@ -582,6 +641,36 @@
         <span class="word-meaning">${meaning}</span>
         <div class="word-meta">${jlptBadge}${posBadge}${favBtn}</div>
       </div>`;
+    }
+
+    // 词性格式化：转换为简洁标注
+    function formatPos(pos) {
+      if (!pos) return '';
+      // 日文词性（AI 返回）
+      if (pos === '名詞' || pos === '名詞・普通名詞') return '名';
+      if (pos === '動詞' || pos === '動詞・一般') return '动';
+      if (pos === '形容詞' || pos === '形容詞・一般') return 'い形';
+      if (pos === '形容動詞' || pos === 'ナ形容詞') return 'な形';
+      if (pos === '副詞') return '副';
+      if (pos === '接続詞') return '接';
+      if (pos === '感動詞') return '感';
+      if (pos === '助詞') return '助';
+      if (pos === '代名詞') return '代';
+      // 中文词性（词典存储）
+      if (pos.includes('五段') || pos.startsWith('v5')) return '动1';
+      if (pos.includes('一段') || pos === 'v1') return '动2';
+      if (pos.includes('サ変') || pos === 'vs' || pos === 'vs-i') return '动3';
+      if (pos.includes('カ変') || pos === 'vk') return '动3';
+      if (pos.includes('い形') || pos === 'adj-i') return 'い形';
+      if (pos.includes('な形') || pos === 'adj-na') return 'な形';
+      if (pos === '名词' || pos === 'n') return '名';
+      if (pos === '副词' || pos === 'adv') return '副';
+      if (pos === '接续词' || pos === 'conj') return '接';
+      if (pos === '感叹词' || pos === 'int') return '感';
+      if (pos === '助词' || pos === 'prt') return '助';
+      if (pos === '代词' || pos === 'pn') return '代';
+      if (pos.includes('动词') || pos.startsWith('v')) return '动';
+      return pos;
     }
 
     // 收藏按钮点击事件（事件委托）
@@ -749,6 +838,9 @@
       document.getElementById('cfgLang').value = appCfg.lang || 'zh';
       document.getElementById('cfgHotkey').value = appCfg.hotkey || 'Ctrl+Shift+J';
       document.getElementById('cfgFont').value = appCfg.font || 'system';
+      const savedSize = appCfg.fontSize || 13;
+      document.getElementById('cfgFontSize').value = savedSize;
+      document.getElementById('cfgFontSizeVal').textContent = savedSize + 'px';
       applyTheme(appCfg.theme || 'dark'); // 同步主题选中状态
       document.getElementById('cfgProvider').value = config.provider || 'azure';
       document.getElementById('cfgEnabled').checked = config.enabled || false;
@@ -826,6 +918,19 @@
       document.getElementById('cfgApiKey').value = p.apiKey || '';
       document.getElementById('cfgModel').value = p.model || '';
       document.getElementById('cfgBaseUrl').value = p.baseUrl || '';
+      // Azure 专属字段
+      const isAzure = provider === 'azure';
+      document.getElementById('azureFields').style.display = isAzure ? 'block' : 'none';
+      if (isAzure) {
+        document.getElementById('cfgAzureDeployment').value = p.azureDeployment || '';
+        document.getElementById('cfgAzureApiVersion').value = p.azureApiVersion || '';
+      }
+      // DeepSeek 专属字段
+      const isDeepseek = provider === 'deepseek';
+      document.getElementById('deepseekFields').style.display = isDeepseek ? 'block' : 'none';
+      if (isDeepseek) {
+        document.getElementById('cfgDeepseekThinking').checked = p.thinking || false;
+      }
     }
 
     // 语言切换实时预览
@@ -871,29 +976,40 @@
       const newLang = document.getElementById('cfgLang').value;
       const newHotkey = document.getElementById('cfgHotkey').value;
       const newFont = document.getElementById('cfgFont').value;
+      const newFontSize = parseInt(document.getElementById('cfgFontSize').value) || 13;
       const newTheme = document.querySelector('.theme-option.active')?.dataset.theme || 'dark';
       const hotkeyResult = await window.api.setHotkey(newHotkey);
 
       // 保存语言、主题、字体
-      await window.api.saveAppConfig({ lang: newLang, theme: newTheme, font: newFont });
+      await window.api.saveAppConfig({ lang: newLang, theme: newTheme, font: newFont, fontSize: newFontSize });
       currentLang = newLang;
       applyFont(newFont);
+      applyFontSize(newFontSize);
       applyLanguage();
 
       // 保存 LLM 配置：把当前字段存到对应的 provider 下
       const provider = document.getElementById('cfgProvider').value;
+      const enabledChecked = document.getElementById('cfgEnabled').checked;
+      const apiKeyValue = document.getElementById('cfgApiKey').value.trim();
       const currentConfig = await window.api.llmGetConfig();
       const providers = currentConfig.providers || {};
       providers[provider] = {
         ...(providers[provider] || {}),
-        apiKey: document.getElementById('cfgApiKey').value,
+        apiKey: apiKeyValue,
         model: document.getElementById('cfgModel').value,
-        baseUrl: document.getElementById('cfgBaseUrl').value
+        baseUrl: document.getElementById('cfgBaseUrl').value,
+        ...(provider === 'azure' ? {
+          azureDeployment: document.getElementById('cfgAzureDeployment').value,
+          azureApiVersion: document.getElementById('cfgAzureApiVersion').value
+        } : {}),
+        ...(provider === 'deepseek' ? {
+          thinking: document.getElementById('cfgDeepseekThinking').checked
+        } : {})
       };
 
       await window.api.llmSaveConfig({
         provider: provider,
-        enabled: document.getElementById('cfgEnabled').checked,
+        enabled: enabledChecked,
         providers: providers
       });
 
@@ -905,6 +1021,10 @@
         msg.style.color = '#e94560';
         msg.textContent = '⚠ ' + t('settings_hotkey_fail');
         document.getElementById('cfgHotkey').value = hotkeyResult.hotkey;
+      } else if (enabledChecked && provider !== 'ollama' && !apiKeyValue) {
+        // 启用了 AI 但 key 为空，给出警告
+        msg.style.color = '#f0883e';
+        msg.textContent = '⚠ 已保存，但 API Key 为空，AI 功能无法使用';
       } else {
         msg.style.color = '#2ecc71';
         msg.textContent = t('settings_saved');
@@ -925,6 +1045,7 @@
       // 应用主题和字体
       applyTheme(appCfg.theme || 'dark');
       applyFont(appCfg.font || 'system');
+      applyFontSize(appCfg.fontSize || 13);
       applyLanguage();
       initLLMStatus();
       initUpdater();
