@@ -18,6 +18,12 @@ contextBridge.exposeInMainWorld('api', {
   llmIsEnabled: () => ipcRenderer.invoke('llm-is-enabled'),
   llmClearCache: () => ipcRenderer.invoke('llm-clear-cache'),
 
+  // 提示词相关
+  promptGetDefault: (type) => ipcRenderer.invoke('prompt-get-default', type),
+  promptGetActive: (type) => ipcRenderer.invoke('prompt-get-active', type),
+  promptSave: (type, prompt) => ipcRenderer.invoke('prompt-save', type, prompt),
+  promptReset: (type) => ipcRenderer.invoke('prompt-reset', type),
+
   // 应用设置
   getAppConfig: () => ipcRenderer.invoke('get-app-config'),
   setHotkey: (hotkey) => ipcRenderer.invoke('set-hotkey', hotkey),

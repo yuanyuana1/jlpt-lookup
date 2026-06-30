@@ -344,6 +344,36 @@
 
       <button class="btn-secondary" id="cfgClearCache" style="width:100%;margin-top:8px;">清空 AI 缓存</button>
 
+      <div class="divider"></div>
+      
+      <!-- 提示词设置 -->
+      <h2 style="font-size:14px;margin-bottom:12px;">提示词设置</h2>
+      
+      <div class="form-group">
+        <label style="display:flex;align-items:center;justify-content:space-between;">
+          <span>提示词类型</span>
+          <select id="cfgPromptType" style="width:140px;">
+            <option value="long">长文本（句子）</option>
+            <option value="short">短文本（单词）</option>
+          </select>
+        </label>
+      </div>
+      
+      <div class="form-group">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+          <label style="margin:0;font-size:12px;color:var(--text-muted);">提示词内容</label>
+          <span id="promptStatus" style="font-size:11px;color:var(--text-faint);"></span>
+        </div>
+        <textarea id="cfgPrompt" style="width:100%;min-height:200px;padding:10px;border:1px solid var(--border-sub);border-radius:6px;background:var(--bg-base);color:var(--text-primary);font-size:12px;font-family:Consolas,monospace;resize:vertical;outline:none;" placeholder="输入自定义提示词..."></textarea>
+      </div>
+      
+      <div style="display:flex;gap:8px;margin-bottom:8px;">
+        <button class="btn-secondary" id="cfgResetPrompt" style="flex:1;">恢复默认</button>
+        <button class="btn-primary" id="cfgSavePrompt" style="flex:1;">保存提示词</button>
+      </div>
+
+      <div class="divider"></div>
+
       <div class="form-actions">
         <button class="btn-secondary" id="cfgCancel">取消</button>
         <button class="btn-primary" id="cfgSave">保存</button>
@@ -850,6 +880,8 @@
       document.getElementById('appVersion').textContent = ver;
       // 重置检查结果
       document.getElementById('updateCheckResult').textContent = '';
+      // 加载提示词
+      loadPromptContent();
       settingsPanel.classList.add('show');
     });
 
@@ -970,6 +1002,47 @@
         btn.textContent = t('cache_clear_btn');
         btn.disabled = false;
       }, 2000);
+    });
+
+    // 提示词相关
+    let currentPromptType = 'long';
+    
+    async function loadPromptContent() {
+      const result = await window.api.promptGetActive(currentPromptType);
+      document.getElementById('cfgPrompt').value = result.content;
+      document.getElementById('promptStatus').textContent = result.isCustom ? '（自定义）' : '（默认）';
+    }
+    
+    document.getElementById('cfgPromptType').addEventListener('change', (e) => {
+      currentPromptType = e.target.value;
+      loadPromptContent();
+    });
+    
+    document.getElementById('cfgResetPrompt').addEventListener('click', async () => {
+      const btn = document.getElementById('cfgResetPrompt');
+      btn.disabled = true;
+      btn.textContent = '重置中...';
+      await window.api.promptReset(currentPromptType);
+      await loadPromptContent();
+      btn.textContent = '已恢复默认';
+      setTimeout(() => {
+        btn.textContent = '恢复默认';
+        btn.disabled = false;
+      }, 1500);
+    });
+    
+    document.getElementById('cfgSavePrompt').addEventListener('click', async () => {
+      const btn = document.getElementById('cfgSavePrompt');
+      const prompt = document.getElementById('cfgPrompt').value;
+      btn.disabled = true;
+      btn.textContent = '保存中...';
+      await window.api.promptSave(currentPromptType, prompt);
+      await loadPromptContent();
+      btn.textContent = '已保存';
+      setTimeout(() => {
+        btn.textContent = '保存提示词';
+        btn.disabled = false;
+      }, 1500);
     });
 
     document.getElementById('cfgSave').addEventListener('click', async () => {

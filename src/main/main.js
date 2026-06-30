@@ -3,7 +3,7 @@ const path = require('path');
 const fs = require('fs');
 const { lookupWord, lookupGrammar } = require('./dictionary');
 const { tokenize } = require('./tokenizer');
-const { loadConfig, saveConfig, getConfig, isLLMEnabled, analyzeSentence, clearCache, getFromCache } = require('./llm');
+const { loadConfig, saveConfig, getConfig, isLLMEnabled, analyzeSentence, clearCache, getFromCache, getDefaultPrompt, getActivePrompt, saveCustomPrompt, resetPrompt } = require('./llm');
 const { loadFavorites, getFavorites, addFavorite, removeFavorite, updateFavoriteNote, isFavorite, clearFavorites } = require('./favorites');
 const { loadHistory, getHistory, addHistory, removeHistory, clearHistory } = require('./history');
 const { getUserDataPath } = require('./paths');
@@ -474,6 +474,23 @@ ipcMain.handle('save-app-config', (event, config) => {
 ipcMain.handle('llm-clear-cache', () => {
   clearCache();
   return { success: true };
+});
+
+// 提示词相关 IPC
+ipcMain.handle('prompt-get-default', (event, type) => {
+  return getDefaultPrompt(type);
+});
+
+ipcMain.handle('prompt-get-active', (event, type) => {
+  return getActivePrompt(type);
+});
+
+ipcMain.handle('prompt-save', (event, type, prompt) => {
+  return saveCustomPrompt(type, prompt);
+});
+
+ipcMain.handle('prompt-reset', (event, type) => {
+  return resetPrompt(type);
 });
 
 ipcMain.handle('get-app-version', () => {
