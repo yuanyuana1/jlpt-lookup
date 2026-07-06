@@ -27,26 +27,26 @@ const DEFAULT_CONFIG = {
   providers: {
     azure: {
       apiKey: '',
-      model: 'gpt-4o-mini',
-      baseUrl: 'https://openai-nec-as-ai-br-rag.openai.azure.com',
-      azureDeployment: 'gpt-4o-mini',
-      azureApiVersion: '2025-01-01-preview'
+      model: '',
+      baseUrl: '',
+      azureDeployment: '',
+      azureApiVersion: ''
     },
     deepseek: {
       apiKey: '',
-      model: 'deepseek-v4-flash',
-      baseUrl: 'https://api.deepseek.com',
+      model: '',
+      baseUrl: '',
       thinking: false
     },
     openai: {
       apiKey: '',
-      model: 'gpt-4o-mini',
-      baseUrl: 'https://api.openai.com/v1'
+      model: '',
+      baseUrl: ''
     },
     ollama: {
       apiKey: '',
-      model: 'qwen2.5:7b',
-      baseUrl: 'http://localhost:11434/v1'
+      model: '',
+      baseUrl: ''
     }
   },
   // 自定义提示词（null 表示使用默认）
