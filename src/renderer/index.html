@@ -81,6 +81,8 @@
     .result-area::-webkit-scrollbar-thumb { background: var(--scrollbar); border-radius: 3px; }
     .token-row { display: flex; flex-wrap: wrap; gap: 2px; padding: 10px 0 12px; border-bottom: 1px solid var(--border); }
     .token { font-size: 15px; padding: 2px 4px; border-radius: 3px; cursor: default; }
+    .token ruby { ruby-position: over; }
+    .token rt { color: var(--text-faint); font-size: 0.62em; font-weight: 400; }
     .token-noun     { color: var(--text-primary); border-bottom: 2px solid var(--accent); }
     .token-verb     { color: var(--text-primary); border-bottom: 2px solid #3fb950; }
     .token-adj      { color: var(--text-primary); border-bottom: 2px solid var(--orange); }
@@ -266,6 +268,7 @@
           <option value="sans">无衬线 (Segoe UI)</option>
           <option value="serif">衬线 (Georgia)</option>
           <option value="mono">等宽 (Consolas)</option>
+          <option value="meiryo">日文 (Meiryo)</option>
           <option value="yahei">微软雅黑</option>
           <option value="source">思源黑体</option>
         </select>
@@ -277,6 +280,13 @@
           <input type="range" id="cfgFontSize" min="11" max="18" step="1" style="flex:1;" />
           <span id="cfgFontSizeVal" style="font-size:12px;color:var(--text-muted);width:32px;text-align:right;flex-shrink:0;">13px</span>
         </div>
+      </div>
+
+      <div class="form-group">
+        <label style="display:flex;align-items:center;cursor:pointer;">
+          <input type="checkbox" id="cfgShowFurigana" checked />
+          <span>显示假名</span>
+        </label>
       </div>
 
       <div class="form-group">
@@ -433,6 +443,7 @@
       sans:   '"Segoe UI", "Helvetica Neue", Arial, sans-serif',
       serif:  'Georgia, "Times New Roman", serif',
       mono:   'Consolas, "Courier New", monospace',
+      meiryo: 'Meiryo, "メイリオ", sans-serif',
       yahei:  '"Microsoft YaHei", "微软雅黑", sans-serif',
       source: '"Source Han Sans SC", "Noto Sans CJK SC", "Microsoft YaHei", sans-serif'
     };
@@ -472,6 +483,7 @@
     const settingsBtn = document.getElementById('settingsBtn');
     const settingsPanel = document.getElementById('settingsPanel');
     const llmBadge = document.getElementById('llmBadge');
+    let currentResultData = null;
 
     async function initLLMStatus() {
       const enabled = await window.api.llmIsEnabled();
@@ -532,6 +544,7 @@
     searchInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') doSearch(); });
 
     function renderResults(data) {
+      currentResultData = data;
       let html = '';
 
       if (data.mode === 'word') {
@@ -592,9 +605,31 @@
         .filter(t => t.surface_form && t.surface_form.trim())
         .map(t => {
           const cls = posMap[t.pos] || 'token-other';
-          return `<span class="token ${cls}" title="${t.pos || ''}">${t.surface_form}</span>`;
+          return `<span class="token ${cls}" title="${t.pos || ''}">${renderFurigana(t.surface_form, t.reading)}</span>`;
         }).join('');
       return `<div class="token-row">${spans}</div>`;
+    }
+
+    function renderFurigana(surface, reading) {
+      if (window.appConfig?.showFurigana === false) return surface;
+      if (!/[\u3400-\u9fff々]/.test(surface) || !reading) return surface;
+
+      const parts = surface.match(/[\u3400-\u9fff々]+|[^\u3400-\u9fff々]+/g) || [];
+      if (parts.length === 1) return `<ruby>${surface}<rt>${reading}</rt></ruby>`;
+
+      let remainingReading = reading;
+      return parts.map((part, index) => {
+        if (!/[\u3400-\u9fff々]/.test(part)) {
+          if (remainingReading.startsWith(part)) remainingReading = remainingReading.slice(part.length);
+          return part;
+        }
+        const nextKana = parts.slice(index + 1).find(next => !/[\u3400-\u9fff々]/.test(next));
+        const readingEnd = nextKana ? remainingReading.indexOf(nextKana) : remainingReading.length;
+        if (readingEnd < 0) return part;
+        const kana = remainingReading.slice(0, readingEnd);
+        remainingReading = remainingReading.slice(readingEnd);
+        return kana ? `<ruby>${part}<rt>${kana}</rt></ruby>` : part;
+      }).join('');
     }
 
     function renderAIResult(a) {
@@ -871,6 +906,7 @@
       const savedSize = appCfg.fontSize || 13;
       document.getElementById('cfgFontSize').value = savedSize;
       document.getElementById('cfgFontSizeVal').textContent = savedSize + 'px';
+      document.getElementById('cfgShowFurigana').checked = appCfg.showFurigana !== false;
       applyTheme(appCfg.theme || 'dark'); // 同步主题选中状态
       document.getElementById('cfgProvider').value = config.provider || 'azure';
       document.getElementById('cfgEnabled').checked = config.enabled || false;
@@ -1051,14 +1087,17 @@
       const newFont = document.getElementById('cfgFont').value;
       const newFontSize = parseInt(document.getElementById('cfgFontSize').value) || 13;
       const newTheme = document.querySelector('.theme-option.active')?.dataset.theme || 'dark';
+      const showFurigana = document.getElementById('cfgShowFurigana').checked;
       const hotkeyResult = await window.api.setHotkey(newHotkey);
 
       // 保存语言、主题、字体
-      await window.api.saveAppConfig({ lang: newLang, theme: newTheme, font: newFont, fontSize: newFontSize });
+      const updatedAppConfig = await window.api.saveAppConfig({ lang: newLang, theme: newTheme, font: newFont, fontSize: newFontSize, showFurigana });
+      window.appConfig = updatedAppConfig;
       currentLang = newLang;
       applyFont(newFont);
       applyFontSize(newFontSize);
       applyLanguage();
+      if (currentResultData) renderResults(currentResultData);
 
       // 保存 LLM 配置：把当前字段存到对应的 provider 下
       const provider = document.getElementById('cfgProvider').value;
@@ -1114,6 +1153,7 @@
     // 初始化
     async function init() {
       const appCfg = await window.api.getAppConfig();
+      window.appConfig = appCfg;
       currentLang = appCfg.lang || 'zh';
       // 应用主题和字体
       applyTheme(appCfg.theme || 'dark');

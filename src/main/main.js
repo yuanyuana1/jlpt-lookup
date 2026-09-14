@@ -15,7 +15,7 @@ let tray = null;
 
 // 应用设置 - 使用用户数据目录（打包后可写）
 const APP_CONFIG_PATH = getUserDataPath('app-config.json');
-let appConfig = { hotkey: 'Ctrl+Shift+J' };
+let appConfig = { hotkey: 'Ctrl+Shift+J', showFurigana: true };
 
 function loadAppConfig() {
   try {
