@@ -143,6 +143,13 @@
     @keyframes spin { to { transform: rotate(360deg); } }
     .settings-panel { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 100; }
     .settings-panel.show { display: flex; align-items: center; justify-content: center; }
+    .license-gate { display: none; position: fixed; inset: 0; z-index: 200; align-items: center; justify-content: center; background: var(--bg-base); padding: 24px; }
+    .license-gate.show { display: flex; }
+    .license-gate-content { width: min(100%, 360px); text-align: center; }
+    .license-gate h2 { font-size: 20px; margin-bottom: 10px; }
+    .license-gate p { color: var(--text-muted); font-size: 13px; line-height: 1.6; margin-bottom: 20px; }
+    .license-gate .btn-primary { width: 100%; padding: 10px; border: none; border-radius: 6px; cursor: pointer; font-size: 14px; font-weight: 500; }
+    .license-status { color: var(--text-muted); font-size: 12px; margin: 8px 0; line-height: 1.5; }
     .settings-content { background: var(--bg-surface); border: 1px solid var(--border-sub); border-radius: 12px; padding: 20px; width: 380px; max-height: 85vh; overflow-y: auto; }
     .settings-content::-webkit-scrollbar { width: 5px; }
     .settings-content::-webkit-scrollbar-thumb { background: var(--scrollbar); border-radius: 3px; }
@@ -172,6 +179,14 @@
   </style>
 </head>
 <body>
+  <div class="license-gate" id="licenseGate">
+    <div class="license-gate-content">
+      <h2>需要授权</h2>
+      <p id="licenseGateMessage">请导入购买后获得的授权文件以继续使用。</p>
+      <button class="btn-primary" id="licenseImportBtn">导入授权文件</button>
+    </div>
+  </div>
+
   <!-- 更新通知条（默认隐藏） -->
   <div id="updateBar" style="display:none;background:var(--accent-bg);border-bottom:1px solid var(--accent);padding:8px 16px;font-size:12px;color:var(--accent);display:none;align-items:center;gap:10px;">
     <span id="updateMsg" style="flex:1;"></span>
@@ -287,6 +302,12 @@
           <input type="checkbox" id="cfgShowFurigana" checked />
           <span>显示假名</span>
         </label>
+      </div>
+
+      <div class="form-group">
+        <label>授权</label>
+        <div class="license-status" id="licenseStatus">正在检查授权状态...</div>
+        <button class="btn-secondary" id="licenseImportSettingsBtn" style="width:100%;">导入新授权文件</button>
       </div>
 
       <div class="form-group">
@@ -485,6 +506,36 @@
     const llmBadge = document.getElementById('llmBadge');
     let currentResultData = null;
 
+    function updateLicenseStatus(status) {
+      const statusEl = document.getElementById('licenseStatus');
+      if (status.valid) {
+        statusEl.textContent = `${status.message}（${status.customerName}）`;
+        statusEl.style.color = 'var(--green-hover)';
+      } else {
+        statusEl.textContent = status.message;
+        statusEl.style.color = 'var(--red)';
+      }
+    }
+
+    async function refreshLicenseStatus() {
+      const status = await window.api.licenseGetStatus();
+      updateLicenseStatus(status);
+      document.getElementById('licenseGate').classList.toggle('show', !status.valid);
+      if (!status.valid) document.getElementById('licenseGateMessage').textContent = status.message;
+      return status;
+    }
+
+    async function importLicense() {
+      const status = await window.api.licenseImport();
+      updateLicenseStatus(status);
+      document.getElementById('licenseGate').classList.toggle('show', !status.valid);
+      if (!status.valid) document.getElementById('licenseGateMessage').textContent = status.message;
+    }
+
+    document.getElementById('licenseImportBtn').addEventListener('click', importLicense);
+    document.getElementById('licenseImportSettingsBtn').addEventListener('click', importLicense);
+    window.api.onLicenseRequired(() => refreshLicenseStatus());
+
     async function initLLMStatus() {
       const enabled = await window.api.llmIsEnabled();
       updateBadge(enabled);
@@ -518,6 +569,10 @@
       resultArea.innerHTML = `<div class="loading"><span class="spinner"></span>${t('loading')}</div>`;
       
       const data = await window.api.lookup(text);
+      if (data?.error === 'LICENSE_REQUIRED') {
+        refreshLicenseStatus();
+        return;
+      }
       if (!data) {
         resultArea.innerHTML = `<div class="empty-state">${t('no_result')}</div>`;
         return;
@@ -907,6 +962,7 @@
       document.getElementById('cfgFontSize').value = savedSize;
       document.getElementById('cfgFontSizeVal').textContent = savedSize + 'px';
       document.getElementById('cfgShowFurigana').checked = appCfg.showFurigana !== false;
+      await refreshLicenseStatus();
       applyTheme(appCfg.theme || 'dark'); // 同步主题选中状态
       document.getElementById('cfgProvider').value = config.provider || 'azure';
       document.getElementById('cfgEnabled').checked = config.enabled || false;
@@ -1160,6 +1216,7 @@
       applyFont(appCfg.font || 'system');
       applyFontSize(appCfg.fontSize || 13);
       applyLanguage();
+      await refreshLicenseStatus();
       initLLMStatus();
       initUpdater();
     }

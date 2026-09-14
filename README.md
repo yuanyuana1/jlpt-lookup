@@ -2,6 +2,12 @@
 
 选中日语文本，一键查看 JLPT 释义、假名读音和语法分析。
 
+## 授权与数据来源
+
+本软件代码为商业专有软件。购买者获得个人使用许可，不获得源代码、修改、再分发或转售权；完整条款见 [LICENSE](LICENSE)。
+
+词典数据的授权独立于软件代码。应用使用了 JMdict/EDRDG 词典数据，相关署名、许可与更新要求见 [DATA_SOURCES.md](DATA_SOURCES.md)。第三方软件许可证见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
+
 ## 功能
 
 - 🔍 系统级划词查询（Ctrl+Shift+J）

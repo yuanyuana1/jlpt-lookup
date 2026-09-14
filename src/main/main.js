@@ -8,6 +8,7 @@ const { loadFavorites, getFavorites, addFavorite, removeFavorite, updateFavorite
 const { loadHistory, getHistory, addHistory, removeHistory, clearHistory } = require('./history');
 const { getUserDataPath } = require('./paths');
 const { initUpdater } = require('./updater');
+const { getLicenseStatus, importLicenseFile } = require('./license');
 
 let mainWindow = null;
 let popupWindow = null;
@@ -244,6 +245,14 @@ function createTray() {
 
 // 处理划词查询
 async function handleLookup() {
+  if (!getLicenseStatus().valid) {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.show();
+      mainWindow.webContents.send('license-required');
+    }
+    return;
+  }
+
   const text = clipboard.readText().trim();
   
   if (!text || text.length === 0) return;
@@ -385,6 +394,7 @@ app.on('will-quit', () => {
 
 // IPC 处理
 ipcMain.handle('lookup', async (event, text) => {
+  if (!getLicenseStatus().valid) return { error: 'LICENSE_REQUIRED' };
   if (!text || !isJapanese(text)) return null;
   
   const lang = appConfig.lang || 'zh';
@@ -437,8 +447,24 @@ ipcMain.handle('close-popup', () => {
 
 // LLM 相关 IPC
 ipcMain.handle('llm-analyze', async (event, text) => {
+  if (!getLicenseStatus().valid) return null;
   if (!text || !isJapanese(text)) return null;
   return await analyzeSentence(text);
+});
+
+ipcMain.handle('license-get-status', () => {
+  return getLicenseStatus();
+});
+
+ipcMain.handle('license-import', async () => {
+  const { dialog } = require('electron');
+  const result = await dialog.showOpenDialog(mainWindow, {
+    title: '导入授权文件',
+    properties: ['openFile'],
+    filters: [{ name: 'JLPT Lookup 授权文件', extensions: ['jlptlicense'] }]
+  });
+  if (result.canceled || result.filePaths.length === 0) return getLicenseStatus();
+  return importLicenseFile(result.filePaths[0]);
 });
 
 ipcMain.handle('llm-get-config', () => {

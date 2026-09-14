@@ -10,6 +10,9 @@ contextBridge.exposeInMainWorld('api', {
   onLLMResult: (callback) => {
     ipcRenderer.on('llm-result', (event, data) => callback(data));
   },
+  onLicenseRequired: (callback) => {
+    ipcRenderer.on('license-required', () => callback());
+  },
 
   // LLM 相关
   llmAnalyze: (text) => ipcRenderer.invoke('llm-analyze', text),
@@ -28,6 +31,10 @@ contextBridge.exposeInMainWorld('api', {
   getAppConfig: () => ipcRenderer.invoke('get-app-config'),
   setHotkey: (hotkey) => ipcRenderer.invoke('set-hotkey', hotkey),
   saveAppConfig: (config) => ipcRenderer.invoke('save-app-config', config),
+
+  // 授权
+  licenseGetStatus: () => ipcRenderer.invoke('license-get-status'),
+  licenseImport: () => ipcRenderer.invoke('license-import'),
 
   // 收藏/生词本
   favoritesGet: () => ipcRenderer.invoke('favorites-get'),

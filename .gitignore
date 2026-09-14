@@ -8,3 +8,6 @@ data/llm-cache.json
 data/llm-config.json
 data/history.json
 data/favorites.json
+data/license.jlptlicense
+keys/
+issued-licenses/
