@@ -43,6 +43,9 @@ const LANGS = {
       cache_clear_btn: '🗑 清空 AI 缓存',
       cache_clearing: '清空中...',
       cache_cleared: '✓ 缓存已清空',
+      speak: '朗读日语',
+      stop_speaking: '停止朗读',
+      speech_unavailable: '当前环境不支持朗读',
       // 收藏/生词本
       tab_search: '🔍 查询',
       tab_favorites: '⭐ 生词本',
@@ -103,6 +106,9 @@ const LANGS = {
       cache_clear_btn: '🗑 Clear AI Cache',
       cache_clearing: 'Clearing...',
       cache_cleared: '✓ Cache cleared',
+      speak: 'Read Japanese aloud',
+      stop_speaking: 'Stop reading',
+      speech_unavailable: 'Speech synthesis is unavailable',
       // Favorites
       tab_search: '🔍 Search',
       tab_favorites: '⭐ Vocabulary',
@@ -163,6 +169,9 @@ const LANGS = {
       cache_clear_btn: '🗑 AIキャッシュをクリア',
       cache_clearing: 'クリア中...',
       cache_cleared: '✓ キャッシュをクリアしました',
+      speak: '日本語を読み上げる',
+      stop_speaking: '読み上げを停止',
+      speech_unavailable: 'この環境では読み上げを利用できません',
       // 単語帳
       tab_search: '🔍 検索',
       tab_favorites: '⭐ 単語帳',

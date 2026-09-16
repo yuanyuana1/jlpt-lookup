@@ -99,6 +99,9 @@
     .badge { font-size: 10px; padding: 2px 6px; border-radius: 4px; font-weight: 600; }
     .badge-jlpt { background: var(--accent-bg); color: var(--accent); }
     .badge-pos  { background: var(--purple-bg); color: var(--purple); }
+    .speak-btn { width: 28px; height: 28px; display: inline-flex; align-items: center; justify-content: center; background: none; border: none; color: var(--text-faint); cursor: pointer; border-radius: 4px; font-size: 14px; line-height: 1; }
+    .speak-btn:hover, .speak-btn.speaking { color: var(--accent); background: var(--accent-bg); }
+    .pronunciation-toolbar { display: flex; justify-content: flex-end; padding: 0 0 6px; border-bottom: 1px solid var(--border); }
     .fav-btn { background: none; border: none; color: var(--text-faint); cursor: pointer; font-size: 16px; padding: 4px; border-radius: 4px; }
     .fav-btn:hover { color: var(--orange); background: #f0883e1a; }
     .fav-btn.saved { color: var(--orange); }
@@ -505,6 +508,68 @@
     const settingsPanel = document.getElementById('settingsPanel');
     const llmBadge = document.getElementById('llmBadge');
     let currentResultData = null;
+    let activeSpeechButton = null;
+
+    function supportsSpeechSynthesis() {
+      return 'speechSynthesis' in window && 'SpeechSynthesisUtterance' in window;
+    }
+
+    function resetSpeechButton() {
+      if (!activeSpeechButton) return;
+      activeSpeechButton.classList.remove('speaking');
+      activeSpeechButton.innerHTML = '&#128266;';
+      activeSpeechButton.title = t('speak');
+      activeSpeechButton.setAttribute('aria-label', t('speak'));
+      activeSpeechButton = null;
+    }
+
+    function stopSpeaking() {
+      if (supportsSpeechSynthesis()) window.speechSynthesis.cancel();
+      resetSpeechButton();
+    }
+
+    function speakJapanese(text, button) {
+      if (!text) return;
+      if (!supportsSpeechSynthesis()) {
+        button.title = t('speech_unavailable');
+        button.setAttribute('aria-label', t('speech_unavailable'));
+        return;
+      }
+      if (activeSpeechButton === button) {
+        stopSpeaking();
+        return;
+      }
+
+      stopSpeaking();
+      const utterance = new SpeechSynthesisUtterance(text);
+      utterance.lang = 'ja-JP';
+      utterance.rate = 0.9;
+      const japaneseVoice = window.speechSynthesis.getVoices()
+        .find(voice => voice.lang.toLowerCase().startsWith('ja'));
+      if (japaneseVoice) utterance.voice = japaneseVoice;
+
+      activeSpeechButton = button;
+      button.classList.add('speaking');
+      button.innerHTML = '&#9632;';
+      button.title = t('stop_speaking');
+      button.setAttribute('aria-label', t('stop_speaking'));
+      const finishSpeech = () => {
+        if (activeSpeechButton === button) resetSpeechButton();
+      };
+      utterance.onend = finishSpeech;
+      utterance.onerror = finishSpeech;
+      window.speechSynthesis.speak(utterance);
+    }
+
+    function escapeAttribute(value) {
+      return String(value).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+    }
+
+    function renderSpeakButton(text) {
+      if (!text) return '';
+      const label = t('speak');
+      return `<button class="speak-btn" data-speak-text="${escapeAttribute(text)}" title="${label}" aria-label="${label}">&#128266;</button>`;
+    }
 
     function updateLicenseStatus(status) {
       const statusEl = document.getElementById('licenseStatus');
@@ -601,6 +666,10 @@
     function renderResults(data) {
       currentResultData = data;
       let html = '';
+
+      if (data.mode === 'sentence') {
+        html += `<div class="pronunciation-toolbar">${renderSpeakButton(data.originalText)}</div>`;
+      }
 
       if (data.mode === 'word') {
         if (data.results && data.results.length > 0) {
@@ -732,9 +801,11 @@
           const jlptBadge = w.jlpt ? `<span class="badge badge-jlpt vocab-badge">${w.jlpt}</span>` : '';
           const posText = formatPos(w.pos);
           const posBadge = posText ? `<span style="color:var(--text-faint);font-size:12px;flex-shrink:0;">[${posText}]</span>` : '';
+          const speakBtn = renderSpeakButton(w.reading || w.word);
           html += `<div class="vocab-row">
             <span class="vocab-word">${w.word}</span>
             <span class="vocab-reading">${w.reading || ''}</span>
+            ${speakBtn}
             ${posBadge}
             <span class="vocab-meaning">${w.meaning}</span>
             ${jlptBadge}
@@ -754,12 +825,13 @@
       const jlptBadge = item.jlpt_level ? `<span class="badge badge-jlpt">N${item.jlpt_level}</span>` : '';
       const posBadge = item.pos ? `<span class="badge badge-pos">${formatPos(item.pos)}</span>` : '';
       const favBtn = `<button class="fav-btn" data-word="${word}" data-reading="${reading}" data-meaning="${meaning.replace(/"/g, '&quot;')}" data-jlpt="${item.jlpt_level || ''}" data-pos="${item.pos || ''}">☆</button>`;
+      const speakBtn = renderSpeakButton(reading || word);
       
       return `<div class="word-entry">
         <span class="word-text">${word}</span>
         <span class="word-reading">${reading}</span>
         <span class="word-meaning">${meaning}</span>
-        <div class="word-meta">${jlptBadge}${posBadge}${favBtn}</div>
+        <div class="word-meta">${jlptBadge}${posBadge}${speakBtn}${favBtn}</div>
       </div>`;
     }
 
@@ -795,6 +867,12 @@
 
     // 收藏按钮点击事件（事件委托）
     resultArea.addEventListener('click', async (e) => {
+      const speakBtn = e.target.closest('.speak-btn');
+      if (speakBtn) {
+        speakJapanese(speakBtn.dataset.speakText, speakBtn);
+        return;
+      }
+
       if (e.target.classList.contains('fav-btn')) {
         const btn = e.target;
         const item = {
