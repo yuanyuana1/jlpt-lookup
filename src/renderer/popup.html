@@ -154,6 +154,12 @@
       }
     });
 
+    window.api.onLLMTranslation(({ text, translation }) => {
+      if (!currentData || currentData.originalText !== text) return;
+      currentData.llmAnalysis = { translation };
+      renderSentenceMode(currentData);
+    });
+
     // 词性格式化
     function formatPos(pos) {
       if (!pos) return '';
@@ -305,6 +311,10 @@
               ${badge}
             </div>`;
           }
+        }
+
+        if (data.loading) {
+          html += '<div class="loading"><span class="spinner"></span>AI 分析中...</div>';
         }
 
       } else if (data.loading) {

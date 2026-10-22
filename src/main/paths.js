@@ -11,7 +11,7 @@ const path = require('path');
 const fs = require('fs');
 const { app } = require('electron');
 
-const isPacked = app.isPackaged;
+const isPacked = !!app?.isPackaged;
 
 /**
  * 获取只读资源路径（dictionary.db 等打包进去的文件）

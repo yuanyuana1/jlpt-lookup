@@ -394,7 +394,7 @@ function resetPrompt(type) {
 /**
  * 调用 LLM API 分析日语文本
  */
-async function analyzeSentence(text) {
+async function analyzeSentence(text, onTranslation) {
   if (!isLLMEnabled()) {
     return null;
   }
@@ -403,6 +403,7 @@ async function analyzeSentence(text) {
   const cached = getFromCache(text);
   if (cached) {
     console.log(`LLM cache hit: "${text.substring(0, 20)}..."`);
+    if (cached.translation && onTranslation) onTranslation(cached.translation);
     return cached;
   }
 
@@ -423,7 +424,7 @@ async function analyzeSentence(text) {
     let lastError = null;
     for (let attempt = 0; attempt < 3; attempt++) {
       try {
-        const completion = await client.chat.completions.create({
+        const stream = await client.chat.completions.create({
           model: model,
           messages: [
             { role: 'system', content: buildSystemPrompt(text) },
@@ -431,21 +432,36 @@ async function analyzeSentence(text) {
           ],
           temperature: 0.2,
           max_tokens: text.length <= 10 ? 1000 : 4000,
-          stream: false,
+          stream: true,
           // DeepSeek thinking 模式控制
           ...(config.provider === 'deepseek' ? {
             thinking: { type: p.thinking ? 'enabled' : 'disabled' }
           } : {})
         });
 
+        let responseText = '';
+        let translationSent = false;
+        let finishReason = null;
+        for await (const chunk of stream) {
+          responseText += chunk.choices[0]?.delta?.content || '';
+          if (chunk.choices[0]?.finish_reason) {
+            finishReason = chunk.choices[0].finish_reason;
+          }
+          if (!translationSent && onTranslation && responseText.includes('"translation"')) {
+            const translation = extractTranslation(responseText);
+            if (translation) {
+              translationSent = true;
+              onTranslation(translation);
+            }
+          }
+        }
+
         // 检查是否因 token 不足被截断
-        const finishReason = completion.choices[0].finish_reason;
         if (finishReason === 'length') {
           console.warn(`LLM response truncated (finish_reason=length), text: "${text.substring(0, 30)}"`);
         }
 
-        const content = completion.choices[0].message.content;
-        const result = parseResponse(content);
+        const result = parseResponse(responseText);
         
         // 成功则存入缓存
         if (result) {
@@ -474,6 +490,16 @@ async function analyzeSentence(text) {
     return null;
   } catch (err) {
     console.error(`LLM API failed (${config.provider}):`, err.message);
+    return null;
+  }
+}
+
+function extractTranslation(responseText) {
+  const match = responseText.match(/"translation"\s*:\s*"((?:\\.|[^"\\])*)"/);
+  if (!match) return null;
+  try {
+    return JSON.parse(`"${match[1]}"`);
+  } catch {
     return null;
   }
 }

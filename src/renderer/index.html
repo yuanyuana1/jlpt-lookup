@@ -508,6 +508,12 @@
     const settingsPanel = document.getElementById('settingsPanel');
     const llmBadge = document.getElementById('llmBadge');
     let currentResultData = null;
+
+    window.api.onLLMTranslation(({ text, translation }) => {
+      if (!currentResultData || currentResultData.originalText !== text) return;
+      currentResultData.llmAnalysis = { translation };
+      renderResults(currentResultData);
+    });
     let activeSpeechButton = null;
 
     function supportsSpeechSynthesis() {
@@ -647,16 +653,12 @@
       window.api.historyAdd(text, data.mode);
       
       if (data.mode === 'sentence' && data.llmPending) {
-        resultArea.insertAdjacentHTML('afterbegin', `<div class="loading" id="llmLoading"><span class="spinner"></span>AI 分析中...</div>`);
-        
         const analysis = await window.api.llmAnalyze(text);
-        const loadingEl = document.getElementById('llmLoading');
-        if (loadingEl) loadingEl.remove();
-        
+        data.llmPending = false;
         if (analysis) {
           data.llmAnalysis = analysis;
-          renderResults(data);
         }
+        if (currentResultData === data) renderResults(data);
       }
     }
 
@@ -694,10 +696,14 @@
         }
       }
 
+      if (data.mode === 'sentence' && data.llmPending) {
+        html += '<div class="loading"><span class="spinner"></span>AI 分析中...</div>';
+      }
+
       resultArea.innerHTML = html;
       updateFavButtons();
 
-      if (data.mode === 'sentence' && !data.llmAnalysis) {
+      if (data.mode === 'sentence' && !data.llmAnalysis && !data.llmPending) {
         const aiBtn = document.createElement('button');
         aiBtn.className = 'btn-primary';
         aiBtn.style.cssText = 'width:100%;margin-top:12px;';
@@ -705,7 +711,10 @@
         aiBtn.onclick = async () => {
           aiBtn.textContent = t('ai_analyzing');
           aiBtn.disabled = true;
+          data.llmPending = true;
+          renderResults(data);
           const analysis = await window.api.llmAnalyze(data.originalText);
+          data.llmPending = false;
           if (analysis) {
             data.llmAnalysis = analysis;
             renderResults(data);

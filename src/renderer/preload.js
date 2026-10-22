@@ -10,6 +10,9 @@ contextBridge.exposeInMainWorld('api', {
   onLLMResult: (callback) => {
     ipcRenderer.on('llm-result', (event, data) => callback(data));
   },
+  onLLMTranslation: (callback) => {
+    ipcRenderer.on('llm-translation', (event, data) => callback(data));
+  },
   onLicenseRequired: (callback) => {
     ipcRenderer.on('license-required', () => callback());
   },

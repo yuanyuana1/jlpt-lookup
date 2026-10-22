@@ -288,7 +288,11 @@ async function handleLookup() {
     if (isSentence && isLLMEnabled()) {
       llmResult = getFromCache(text);
       if (!llmResult) {
-        llmPromise = analyzeSentence(text);
+        llmPromise = analyzeSentence(text, translation => {
+          if (popupWindow && !popupWindow.isDestroyed()) {
+            popupWindow.webContents.send('llm-translation', { text, translation });
+          }
+        });
       }
     }
 
@@ -449,7 +453,11 @@ ipcMain.handle('close-popup', () => {
 ipcMain.handle('llm-analyze', async (event, text) => {
   if (!getLicenseStatus().valid) return null;
   if (!text || !isJapanese(text)) return null;
-  return await analyzeSentence(text);
+  return await analyzeSentence(text, translation => {
+    if (!event.sender.isDestroyed()) {
+      event.sender.send('llm-translation', { text, translation });
+    }
+  });
 });
 
 ipcMain.handle('license-get-status', () => {

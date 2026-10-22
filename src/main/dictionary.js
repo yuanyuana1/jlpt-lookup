@@ -74,7 +74,7 @@ function saveToDisk(dbPath) {
   if (!db) return;
   // 打包后词典是只读资源，不需要保存
   const { app } = require('electron');
-  if (app.isPackaged) return;
+  if (!app || app.isPackaged) return;
   const filePath = dbPath || getResourcePath('data', 'dictionary.db');
   try {
     const data = db.export();
