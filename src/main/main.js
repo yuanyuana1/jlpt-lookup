@@ -168,6 +168,7 @@ function createMainWindow() {
     show: true,
     frame: true,
     resizable: true,
+    alwaysOnTop: appConfig.mainAlwaysOnTop === true,
     title: 'JLPT Lookup',
     webPreferences: {
       preload: path.join(__dirname, '../renderer/preload.js'),
@@ -195,7 +196,7 @@ function preloadPopup() {
     height: 450,
     show: false,
     frame: false,
-    alwaysOnTop: true,
+    alwaysOnTop: appConfig.popupAlwaysOnTop !== false,
     resizable: true,
     skipTaskbar: true,
     transparent: false,
@@ -492,6 +493,17 @@ ipcMain.handle('get-app-config', () => {
   return appConfig;
 });
 
+ipcMain.handle('toggle-always-on-top', (event) => {
+  const targetWindow = BrowserWindow.fromWebContents(event.sender);
+  if (!targetWindow || targetWindow.isDestroyed()) return false;
+
+  const alwaysOnTop = !targetWindow.isAlwaysOnTop();
+  targetWindow.setAlwaysOnTop(alwaysOnTop);
+  const key = targetWindow === popupWindow ? 'popupAlwaysOnTop' : 'mainAlwaysOnTop';
+  saveAppConfig({ [key]: alwaysOnTop });
+  return alwaysOnTop;
+});
+
 ipcMain.handle('set-hotkey', (event, hotkey) => {
   const success = registerHotkey(hotkey);
   if (success) {
@@ -502,7 +514,13 @@ ipcMain.handle('set-hotkey', (event, hotkey) => {
 });
 
 ipcMain.handle('save-app-config', (event, config) => {
-  return saveAppConfig(config);
+  const updatedConfig = saveAppConfig(config);
+  for (const targetWindow of [mainWindow, popupWindow]) {
+    if (targetWindow && !targetWindow.isDestroyed()) {
+      targetWindow.webContents.send('app-config-updated', updatedConfig);
+    }
+  }
+  return updatedConfig;
 });
 
 ipcMain.handle('llm-clear-cache', () => {

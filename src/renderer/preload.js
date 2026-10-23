@@ -32,6 +32,10 @@ contextBridge.exposeInMainWorld('api', {
 
   // 应用设置
   getAppConfig: () => ipcRenderer.invoke('get-app-config'),
+  toggleAlwaysOnTop: () => ipcRenderer.invoke('toggle-always-on-top'),
+  onAppConfigUpdated: (callback) => {
+    ipcRenderer.on('app-config-updated', (event, config) => callback(config));
+  },
   setHotkey: (hotkey) => ipcRenderer.invoke('set-hotkey', hotkey),
   saveAppConfig: (config) => ipcRenderer.invoke('save-app-config', config),
 

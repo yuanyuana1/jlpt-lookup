@@ -63,6 +63,7 @@
     .ai-status.off { background: var(--border-sub); color: var(--text-muted); }
     .icon-btn { background: none; border: none; color: var(--text-muted); cursor: pointer; padding: 6px; border-radius: 6px; font-size: 14px; }
     .icon-btn:hover { background: var(--bg-input); color: var(--text-primary); }
+    .icon-btn[aria-pressed="true"] { color: var(--accent); background: var(--accent-bg); }
     .tabs { display: flex; border-bottom: 1px solid var(--border); background: var(--bg-surface); padding: 0 16px; }
     .tab-btn { padding: 10px 16px; background: none; border: none; border-bottom: 2px solid transparent; color: var(--text-muted); cursor: pointer; font-size: 13px; font-weight: 500; transition: all 0.15s; }
     .tab-btn:hover { color: var(--text-primary); }
@@ -208,6 +209,8 @@
     <h1>JLPT Lookup</h1>
     <div class="topbar-right">
       <span class="ai-status off" id="llmBadge">AI</span>
+      <button class="icon-btn" id="furiganaToggleBtn" type="button" title="切换原文假名标注" aria-label="切换原文假名标注" aria-pressed="true">あ</button>
+      <button class="icon-btn" id="pinWindowBtn" type="button" title="钉在最前面" aria-label="钉在最前面" aria-pressed="false">📌</button>
       <button class="icon-btn" id="settingsBtn" title="设置">⚙</button>
     </div>
   </div>
@@ -456,6 +459,8 @@
       document.getElementById('cfgCancel').textContent = t('settings_cancel');
       document.getElementById('cfgSave').textContent = t('settings_save');
       document.getElementById('cfgClearCache').textContent = t('cache_clear_btn');
+      updateFuriganaButton();
+      updatePinButton();
       updateBadge(llmBadge.classList.contains('on'));
       updateHint();
       updateFavoritesTab();
@@ -507,7 +512,42 @@
     const settingsBtn = document.getElementById('settingsBtn');
     const settingsPanel = document.getElementById('settingsPanel');
     const llmBadge = document.getElementById('llmBadge');
+    const furiganaToggleBtn = document.getElementById('furiganaToggleBtn');
+    const pinWindowBtn = document.getElementById('pinWindowBtn');
     let currentResultData = null;
+
+    function updateFuriganaButton() {
+      const enabled = window.appConfig?.showFurigana !== false;
+      furiganaToggleBtn.setAttribute('aria-pressed', String(enabled));
+      furiganaToggleBtn.title = t(enabled ? 'furigana_hide' : 'furigana_show');
+      furiganaToggleBtn.setAttribute('aria-label', furiganaToggleBtn.title);
+    }
+
+    function updatePinButton(alwaysOnTop = pinWindowBtn.getAttribute('aria-pressed') === 'true') {
+      pinWindowBtn.setAttribute('aria-pressed', String(alwaysOnTop));
+      pinWindowBtn.title = t(alwaysOnTop ? 'pin_off' : 'pin_on');
+      pinWindowBtn.setAttribute('aria-label', pinWindowBtn.title);
+    }
+
+    furiganaToggleBtn.addEventListener('click', async () => {
+      const updatedConfig = await window.api.saveAppConfig({
+        showFurigana: window.appConfig?.showFurigana === false
+      });
+      window.appConfig = updatedConfig;
+      updateFuriganaButton();
+      if (currentResultData) renderResults(currentResultData);
+    });
+
+    pinWindowBtn.addEventListener('click', async () => {
+      const alwaysOnTop = await window.api.toggleAlwaysOnTop();
+      updatePinButton(alwaysOnTop);
+    });
+
+    window.api.onAppConfigUpdated(config => {
+      window.appConfig = config;
+      updateFuriganaButton();
+      if (currentResultData) renderResults(currentResultData);
+    });
 
     window.api.onLLMTranslation(({ text, translation }) => {
       if (!currentResultData || currentResultData.originalText !== text) return;
@@ -1297,6 +1337,8 @@
     async function init() {
       const appCfg = await window.api.getAppConfig();
       window.appConfig = appCfg;
+      updateFuriganaButton();
+      updatePinButton(appCfg.mainAlwaysOnTop === true);
       currentLang = appCfg.lang || 'zh';
       // 应用主题和字体
       applyTheme(appCfg.theme || 'dark');
