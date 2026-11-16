@@ -32,6 +32,8 @@ contextBridge.exposeInMainWorld('api', {
 
   // 应用设置
   getAppConfig: () => ipcRenderer.invoke('get-app-config'),
+  compactMainWindow: () => ipcRenderer.invoke('compact-main-window'),
+  restoreMainWindow: () => ipcRenderer.invoke('restore-main-window'),
   toggleAlwaysOnTop: () => ipcRenderer.invoke('toggle-always-on-top'),
   onAppConfigUpdated: (callback) => {
     ipcRenderer.on('app-config-updated', (event, config) => callback(config));

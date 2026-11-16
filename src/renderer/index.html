@@ -213,6 +213,7 @@
       <span class="ai-status off" id="llmBadge">AI</span>
       <button class="icon-btn" id="furiganaToggleBtn" type="button" title="切换原文假名标注" aria-label="切换原文假名标注" aria-pressed="true">あ</button>
       <button class="icon-btn" id="pinWindowBtn" type="button" title="钉在最前面" aria-label="钉在最前面" aria-pressed="false">📌</button>
+      <button class="icon-btn" id="compactWindowBtn" type="button" title="收起为圆形图标" aria-label="收起为圆形图标">◉</button>
       <button class="icon-btn" id="settingsBtn" title="设置">⚙</button>
     </div>
   </div>
@@ -446,6 +447,8 @@
       document.getElementById('searchInput').placeholder = t('search_placeholder');
       document.getElementById('searchBtn').textContent = t('search_btn');
       document.getElementById('searchHint').textContent = t('search_hint');
+      compactWindowBtn.title = t('compact_window');
+      compactWindowBtn.setAttribute('aria-label', compactWindowBtn.title);
       document.getElementById('tabSearch').textContent = t('tab_search');
       document.getElementById('tabFavorites').textContent = t('tab_favorites');
       document.getElementById('tabHistory').textContent = t('tab_history');
@@ -518,6 +521,7 @@
     const llmBadge = document.getElementById('llmBadge');
     const furiganaToggleBtn = document.getElementById('furiganaToggleBtn');
     const pinWindowBtn = document.getElementById('pinWindowBtn');
+    const compactWindowBtn = document.getElementById('compactWindowBtn');
     let currentResultData = null;
 
     function updateFuriganaButton() {
@@ -546,6 +550,8 @@
       const alwaysOnTop = await window.api.toggleAlwaysOnTop();
       updatePinButton(alwaysOnTop);
     });
+
+    compactWindowBtn.addEventListener('click', () => window.api.compactMainWindow());
 
     window.api.onAppConfigUpdated(config => {
       window.appConfig = config;

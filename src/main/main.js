@@ -12,6 +12,7 @@ const { getLicenseStatus, importLicenseFile } = require('./license');
 
 let mainWindow = null;
 let popupWindow = null;
+let compactWindow = null;
 let tray = null;
 
 // 应用设置 - 使用用户数据目录（打包后可写）
@@ -75,7 +76,7 @@ function createAppMenu() {
       submenu: [
         {
           label: '显示主窗口',
-          click: () => mainWindow && mainWindow.show()
+          click: () => restoreMainWindow()
         },
         { type: 'separator' },
         {
@@ -186,6 +187,64 @@ function createMainWindow() {
   });
 }
 
+function compactMainWindow() {
+  if (!mainWindow || mainWindow.isDestroyed() || compactWindow) return false;
+
+  const { x, y, width, height } = mainWindow.getBounds();
+  const size = 72;
+  const bubble = new BrowserWindow({
+    width: size,
+    height: size,
+    x: Math.round(x + (width - size) / 2),
+    y: Math.round(y + (height - size) / 2),
+    show: false,
+    frame: false,
+    transparent: true,
+    backgroundColor: '#00000000',
+    hasShadow: false,
+    resizable: false,
+    skipTaskbar: true,
+    alwaysOnTop: mainWindow.isAlwaysOnTop(),
+    webPreferences: {
+      preload: path.join(__dirname, '../renderer/preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false
+    }
+  });
+  compactWindow = bubble;
+
+  bubble.once('ready-to-show', () => {
+    if (compactWindow !== bubble || mainWindow.isDestroyed()) return;
+    mainWindow.hide();
+    bubble.show();
+  });
+  bubble.on('closed', () => {
+    if (compactWindow !== bubble) return;
+    compactWindow = null;
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.show();
+      mainWindow.focus();
+    }
+  });
+  bubble.loadFile(path.join(__dirname, '../renderer/compact.html')).catch(error => {
+    console.error('Failed to load compact window:', error.message);
+    if (compactWindow === bubble) compactWindow = null;
+    if (!bubble.isDestroyed()) bubble.destroy();
+  });
+  return true;
+}
+
+function restoreMainWindow() {
+  const bubble = compactWindow;
+  compactWindow = null;
+  if (bubble && !bubble.isDestroyed()) bubble.close();
+
+  if (!mainWindow || mainWindow.isDestroyed()) return false;
+  mainWindow.show();
+  mainWindow.focus();
+  return true;
+}
+
 // 弹窗管理：单例预加载模式
 let popupReady = false;
 
@@ -235,20 +294,20 @@ function createTray() {
   tray = new Tray(path.join(__dirname, '../../assets/icon.png'));
   
   const contextMenu = Menu.buildFromTemplate([
-    { label: '显示主窗口', click: () => mainWindow.show() },
+    { label: '显示主窗口', click: () => restoreMainWindow() },
     { label: '退出', click: () => { app.exit(); } }
   ]);
 
   tray.setToolTip('JLPT Lookup - 日语划词查询');
   tray.setContextMenu(contextMenu);
-  tray.on('double-click', () => mainWindow.show());
+  tray.on('double-click', () => restoreMainWindow());
 }
 
 // 处理划词查询
 async function handleLookup() {
   if (!getLicenseStatus().valid) {
     if (mainWindow && !mainWindow.isDestroyed()) {
-      mainWindow.show();
+      restoreMainWindow();
       mainWindow.webContents.send('license-required');
     }
     return;
@@ -495,6 +554,17 @@ ipcMain.handle('llm-is-enabled', () => {
 // 快捷键相关 IPC
 ipcMain.handle('get-app-config', () => {
   return appConfig;
+});
+
+ipcMain.handle('compact-main-window', event => {
+  if (BrowserWindow.fromWebContents(event.sender) !== mainWindow) return false;
+  return compactMainWindow();
+});
+
+ipcMain.handle('restore-main-window', event => {
+  const senderWindow = BrowserWindow.fromWebContents(event.sender);
+  if (senderWindow !== compactWindow && senderWindow !== mainWindow) return false;
+  return restoreMainWindow();
 });
 
 ipcMain.handle('toggle-always-on-top', (event) => {
