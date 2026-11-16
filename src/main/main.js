@@ -403,7 +403,7 @@ ipcMain.handle('lookup', async (event, text) => {
   if (!text || !isJapanese(text)) return null;
   
   const lang = appConfig.lang || 'zh';
-  const paragraphTexts = text.split(/\r?\n[ \t]*\r?\n(?:[ \t]*\r?\n)*/).map(paragraph => paragraph.trim()).filter(Boolean);
+  const paragraphTexts = text.split(/\r?\n/).map(paragraph => paragraph.trim()).filter(Boolean);
   const paragraphs = await Promise.all(paragraphTexts.map(async paragraph => ({
     tokens: await tokenize(paragraph)
   })));
