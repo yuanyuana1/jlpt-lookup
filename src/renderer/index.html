@@ -73,14 +73,16 @@
     .search-container { padding: 16px; }
     .search-box { display: flex; background: var(--bg-input); border: 1px solid var(--border-sub); border-radius: 8px; overflow: hidden; }
     .search-box:focus-within { border-color: var(--accent); }
-    .search-box input { flex: 1; padding: 12px 14px; border: none; background: transparent; color: var(--text-primary); font-size: 15px; outline: none; font-family: inherit; }
-    .search-box input::placeholder { color: var(--text-faint); }
+    .search-box textarea { flex: 1; min-width: 0; min-height: 60px; max-height: 180px; padding: 10px 14px; border: none; background: transparent; color: var(--text-primary); font-size: 15px; line-height: 1.5; outline: none; font-family: inherit; resize: vertical; overflow-y: auto; }
+    .search-box textarea::placeholder { color: var(--text-faint); }
     .search-box button { padding: 12px 20px; background: var(--green); color: #fff; border: none; cursor: pointer; font-size: 14px; font-weight: 500; }
     .search-box button:hover { background: var(--green-hover); }
+    .search-hint { margin-top: 6px; color: var(--text-faint); font-size: 11px; }
     .result-area { flex: 1; overflow-y: auto; padding: 0 16px 16px; }
     .result-area::-webkit-scrollbar { width: 6px; }
     .result-area::-webkit-scrollbar-thumb { background: var(--scrollbar); border-radius: 3px; }
     .token-row { display: flex; flex-wrap: wrap; gap: 2px; padding: 10px 0 12px; border-bottom: 1px solid var(--border); }
+    .token-paragraphs .token-row + .token-row { margin-top: 12px; }
     .token { font-size: 15px; padding: 2px 4px; border-radius: 3px; cursor: default; }
     .token ruby { ruby-position: over; }
     .token rt { color: var(--text-faint); font-size: 0.62em; font-weight: 400; }
@@ -226,9 +228,10 @@
   <div class="tab-content active" id="searchTab">
     <div class="search-container">
       <div class="search-box">
-        <input type="text" id="searchInput" placeholder="输入日语单词或句子..." />
+        <textarea id="searchInput" rows="2" placeholder="输入日语单词或句子..."></textarea>
         <button id="searchBtn">查询</button>
       </div>
+      <div class="search-hint" id="searchHint"></div>
     </div>
     <div class="result-area" id="resultArea">
       <div class="empty-state" id="hintArea"></div>
@@ -442,6 +445,7 @@
     function applyLanguage() {
       document.getElementById('searchInput').placeholder = t('search_placeholder');
       document.getElementById('searchBtn').textContent = t('search_btn');
+      document.getElementById('searchHint').textContent = t('search_hint');
       document.getElementById('tabSearch').textContent = t('tab_search');
       document.getElementById('tabFavorites').textContent = t('tab_favorites');
       document.getElementById('tabHistory').textContent = t('tab_history');
@@ -703,7 +707,12 @@
     }
 
     searchBtn.addEventListener('click', doSearch);
-    searchInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') doSearch(); });
+    searchInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+        e.preventDefault();
+        doSearch();
+      }
+    });
 
     function renderResults(data) {
       currentResultData = data;
@@ -721,7 +730,7 @@
         }
       } else {
         if (data.llmAnalysis) {
-          html += renderTokenRow(data.tokens);
+          html += renderTokenParagraphs(data);
           html += renderAIResult(data.llmAnalysis);
           if (data.results && data.results.length > 0) {
             html += `<details style="margin-top:12px;"><summary style="color:#6e7681;font-size:12px;cursor:pointer;">词典结果 (${data.results.length})</summary><div style="margin-top:8px;">`;
@@ -729,7 +738,7 @@
             html += '</div></details>';
           }
         } else {
-          html += renderTokenRow(data.tokens);
+          html += renderTokenParagraphs(data);
           if (data.results && data.results.length > 0) {
             for (const item of data.results) html += renderWordEntry(item);
           }
@@ -781,6 +790,14 @@
           return `<span class="token ${cls}" title="${t.pos || ''}">${renderFurigana(t.surface_form, t.reading)}</span>`;
         }).join('');
       return `<div class="token-row">${spans}</div>`;
+    }
+
+    function renderTokenParagraphs(data) {
+      if (!Array.isArray(data.paragraphs) || data.paragraphs.length < 2) {
+        return renderTokenRow(data.tokens);
+      }
+      const rows = data.paragraphs.map(paragraph => renderTokenRow(paragraph.tokens)).filter(Boolean);
+      return rows.length > 1 ? `<div class="token-paragraphs">${rows.join('')}</div>` : rows.join('');
     }
 
     function renderFurigana(surface, reading) {

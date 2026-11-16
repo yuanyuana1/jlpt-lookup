@@ -403,7 +403,11 @@ ipcMain.handle('lookup', async (event, text) => {
   if (!text || !isJapanese(text)) return null;
   
   const lang = appConfig.lang || 'zh';
-  const tokens = await tokenize(text);
+  const paragraphTexts = text.split(/\r?\n[ \t]*\r?\n(?:[ \t]*\r?\n)*/).map(paragraph => paragraph.trim()).filter(Boolean);
+  const paragraphs = await Promise.all(paragraphTexts.map(async paragraph => ({
+    tokens: await tokenize(paragraph)
+  })));
+  const tokens = paragraphs.flatMap(paragraph => paragraph.tokens);
   
   // 判断是单词模式还是句子模式
   const contentTokens = tokens.filter(t => 
@@ -442,7 +446,7 @@ ipcMain.handle('lookup', async (event, text) => {
         });
       }
     }
-    return { mode: 'sentence', originalText: text, tokens, results, llmAnalysis: null, llmPending: isLLMEnabled() };
+    return { mode: 'sentence', originalText: text, paragraphs, tokens, results, llmAnalysis: null, llmPending: isLLMEnabled() };
   }
 });
 
