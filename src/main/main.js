@@ -1,4 +1,4 @@
-const { app, BrowserWindow, globalShortcut, clipboard, ipcMain, Tray, Menu } = require('electron');
+const { app, BrowserWindow, globalShortcut, clipboard, ipcMain, Tray, Menu, screen } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const { lookupWord, lookupGrammar } = require('./dictionary');
@@ -13,7 +13,9 @@ const { getLicenseStatus, importLicenseFile } = require('./license');
 let mainWindow = null;
 let popupWindow = null;
 let compactWindow = null;
+let compactWindowState = null;
 let tray = null;
+let opacityAnimationId = 0;
 
 // 应用设置 - 使用用户数据目录（打包后可写）
 const APP_CONFIG_PATH = getUserDataPath('app-config.json');
@@ -187,16 +189,54 @@ function createMainWindow() {
   });
 }
 
-function compactMainWindow() {
-  if (!mainWindow || mainWindow.isDestroyed() || compactWindow) return false;
+function animateWindowOpacity(window, from, to, onComplete) {
+  const animationId = ++opacityAnimationId;
+  const duration = 130;
+  const startTime = Date.now();
+  window.setOpacity(from);
 
-  const { x, y, width, height } = mainWindow.getBounds();
+  function animate() {
+    if (animationId !== opacityAnimationId || window.isDestroyed()) return;
+    const progress = Math.min(1, (Date.now() - startTime) / duration);
+    const easedProgress = progress * progress * (3 - 2 * progress);
+    window.setOpacity(from + (to - from) * easedProgress);
+
+    if (progress === 1) {
+      if (onComplete) onComplete();
+    } else {
+      setTimeout(animate, 12);
+    }
+  }
+
+  animate();
+}
+
+function compactMainWindow(buttonRect) {
+  if (!mainWindow || mainWindow.isDestroyed() || compactWindow) return false;
+  if (!buttonRect || ![buttonRect.x, buttonRect.y, buttonRect.width, buttonRect.height].every(Number.isFinite)
+    || buttonRect.width <= 0 || buttonRect.height <= 0) {
+    console.warn('Invalid compact button bounds received');
+    return false;
+  }
+
+  const windowBounds = mainWindow.getBounds();
+  const contentBounds = mainWindow.getContentBounds();
+  const anchorOffset = {
+    x: contentBounds.x - windowBounds.x + buttonRect.x + buttonRect.width / 2,
+    y: contentBounds.y - windowBounds.y + buttonRect.y + buttonRect.height / 2
+  };
+  compactWindowState = {
+    bounds: windowBounds,
+    anchorOffset,
+    isMaximized: mainWindow.isMaximized(),
+    isFullScreen: mainWindow.isFullScreen()
+  };
   const size = 72;
   const bubble = new BrowserWindow({
     width: size,
     height: size,
-    x: Math.round(x + (width - size) / 2),
-    y: Math.round(y + (height - size) / 2),
+    x: Math.round(windowBounds.x + anchorOffset.x - size / 2),
+    y: Math.round(windowBounds.y + anchorOffset.y - size / 2),
     show: false,
     frame: false,
     transparent: true,
@@ -204,7 +244,7 @@ function compactMainWindow() {
     hasShadow: false,
     resizable: false,
     skipTaskbar: true,
-    alwaysOnTop: mainWindow.isAlwaysOnTop(),
+    alwaysOnTop: true,
     webPreferences: {
       preload: path.join(__dirname, '../renderer/preload.js'),
       contextIsolation: true,
@@ -214,21 +254,27 @@ function compactMainWindow() {
   compactWindow = bubble;
 
   bubble.once('ready-to-show', () => {
-    if (compactWindow !== bubble || mainWindow.isDestroyed()) return;
-    mainWindow.hide();
-    bubble.show();
+    if (compactWindow !== bubble || !mainWindow || mainWindow.isDestroyed()) return;
+    bubble.showInactive();
+    bubble.webContents.send('compact-window-enter');
+    animateWindowOpacity(mainWindow, 1, 0, () => {
+      if (compactWindow !== bubble) return;
+      mainWindow.hide();
+      mainWindow.setOpacity(1);
+      bubble.webContents.send('compact-window-ready');
+    });
   });
   bubble.on('closed', () => {
     if (compactWindow !== bubble) return;
     compactWindow = null;
-    if (mainWindow && !mainWindow.isDestroyed()) {
-      mainWindow.show();
-      mainWindow.focus();
-    }
+    restoreMainWindow();
   });
   bubble.loadFile(path.join(__dirname, '../renderer/compact.html')).catch(error => {
     console.error('Failed to load compact window:', error.message);
-    if (compactWindow === bubble) compactWindow = null;
+    if (compactWindow === bubble) {
+      compactWindow = null;
+      compactWindowState = null;
+    }
     if (!bubble.isDestroyed()) bubble.destroy();
   });
   return true;
@@ -237,9 +283,39 @@ function compactMainWindow() {
 function restoreMainWindow() {
   const bubble = compactWindow;
   compactWindow = null;
-  if (bubble && !bubble.isDestroyed()) bubble.close();
 
   if (!mainWindow || mainWindow.isDestroyed()) return false;
+  if (bubble && !bubble.isDestroyed()) {
+    const state = compactWindowState;
+    if (state && !state.isMaximized && !state.isFullScreen) {
+      const bubbleBounds = bubble.getBounds();
+      const center = {
+        x: bubbleBounds.x + bubbleBounds.width / 2,
+        y: bubbleBounds.y + bubbleBounds.height / 2
+      };
+      const workArea = screen.getDisplayNearestPoint(center).workArea;
+      const maxX = workArea.x + Math.max(0, workArea.width - state.bounds.width);
+      const maxY = workArea.y + Math.max(0, workArea.height - state.bounds.height);
+      const x = Math.max(workArea.x, Math.min(center.x - state.anchorOffset.x, maxX));
+      const y = Math.max(workArea.y, Math.min(center.y - state.anchorOffset.y, maxY));
+      mainWindow.setBounds({ ...state.bounds, x: Math.round(x), y: Math.round(y) });
+    }
+
+    mainWindow.setOpacity(0);
+    mainWindow.show();
+    mainWindow.focus();
+    bubble.webContents.send('compact-window-leave');
+    animateWindowOpacity(mainWindow, 0, 1, () => {
+      mainWindow.setOpacity(1);
+      if (!bubble.isDestroyed()) bubble.close();
+      compactWindowState = null;
+    });
+    return true;
+  }
+
+  ++opacityAnimationId;
+  compactWindowState = null;
+  mainWindow.setOpacity(1);
   mainWindow.show();
   mainWindow.focus();
   return true;
@@ -556,9 +632,19 @@ ipcMain.handle('get-app-config', () => {
   return appConfig;
 });
 
-ipcMain.handle('compact-main-window', event => {
+ipcMain.handle('compact-main-window', (event, buttonRect) => {
   if (BrowserWindow.fromWebContents(event.sender) !== mainWindow) return false;
-  return compactMainWindow();
+  return compactMainWindow(buttonRect);
+});
+
+ipcMain.on('move-compact-window', (event, position) => {
+  if (!compactWindow || compactWindow.isDestroyed()
+    || BrowserWindow.fromWebContents(event.sender) !== compactWindow) return;
+  if (!position || !Number.isFinite(position.x) || !Number.isFinite(position.y)) {
+    console.warn('Invalid compact window position received');
+    return;
+  }
+  compactWindow.setPosition(Math.round(position.x), Math.round(position.y));
 });
 
 ipcMain.handle('restore-main-window', event => {

@@ -17,33 +17,99 @@
       display: grid;
       place-items: center;
     }
-    button {
+    #bubble {
+      display: grid;
+      place-items: center;
       width: 68px;
       height: 68px;
       border: 2px solid rgba(255, 255, 255, 0.75);
       border-radius: 50%;
       background: #0969da;
-      color: #fff;
       box-shadow: 0 3px 12px rgba(0, 0, 0, 0.3);
+      opacity: 0;
+      pointer-events: none;
+      transform: scale(0.62);
+      user-select: none;
+      touch-action: none;
+      transition: opacity 125ms ease-out, transform 125ms cubic-bezier(0.2, 0.8, 0.2, 1);
+    }
+    body.entering #bubble {
+      opacity: 1;
+      transform: scale(1);
+    }
+    body.interactive #bubble {
+      pointer-events: auto;
+    }
+    body.leaving #bubble {
+      opacity: 0;
+      pointer-events: none;
+      transform: scale(0.62);
+    }
+    button {
+      width: 46px;
+      height: 46px;
+      padding: 0;
+      border: none;
+      border-radius: 50%;
+      background: transparent;
+      color: #fff;
       cursor: pointer;
       font: 600 26px/1 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      transition: transform 0.15s, box-shadow 0.15s;
-    }
-    button:hover {
-      transform: scale(1.06);
-      box-shadow: 0 5px 16px rgba(0, 0, 0, 0.38);
     }
     button:focus-visible {
       outline: 2px solid #fff;
-      outline-offset: -6px;
+      outline-offset: -3px;
     }
   </style>
 </head>
 <body>
-  <button id="restoreButton" type="button" title="展开 JLPT Lookup" aria-label="展开 JLPT Lookup">あ</button>
+  <div id="bubble" title="拖动图标移动，单击展开">
+    <button id="restoreButton" type="button" title="展开 JLPT Lookup" aria-label="展开 JLPT Lookup">あ</button>
+  </div>
   <script>
-    document.getElementById('restoreButton').addEventListener('click', () => {
-      window.api.restoreMainWindow();
+    window.api.onCompactWindowEnter(() => document.body.classList.add('entering'));
+    window.api.onCompactWindowReady(() => document.body.classList.add('interactive'));
+    window.api.onCompactWindowLeave(() => document.body.classList.add('leaving'));
+    const bubble = document.getElementById('bubble');
+    let drag = null;
+    let suppressClick = false;
+
+    bubble.addEventListener('pointerdown', event => {
+      if (event.button !== 0 || drag) return;
+      suppressClick = false;
+      drag = {
+        pointerId: event.pointerId,
+        screenX: event.screenX,
+        screenY: event.screenY,
+        windowX: window.screenX,
+        windowY: window.screenY
+      };
+      bubble.setPointerCapture(event.pointerId);
+    });
+
+    bubble.addEventListener('pointermove', event => {
+      if (!drag || event.pointerId !== drag.pointerId) return;
+      const dx = event.screenX - drag.screenX;
+      const dy = event.screenY - drag.screenY;
+      if (!suppressClick && Math.hypot(dx, dy) < 4) return;
+      suppressClick = true;
+      window.api.moveCompactWindow({
+        x: Math.round(drag.windowX + dx),
+        y: Math.round(drag.windowY + dy)
+      });
+    });
+
+    function finishDrag(event) {
+      if (!drag || event.pointerId !== drag.pointerId) return;
+      if (event.type === 'pointercancel') suppressClick = true;
+      drag = null;
+    }
+
+    bubble.addEventListener('pointerup', finishDrag);
+    bubble.addEventListener('pointercancel', finishDrag);
+    bubble.addEventListener('lostpointercapture', finishDrag);
+    bubble.addEventListener('click', event => {
+      if (event.detail === 0 || !suppressClick) window.api.restoreMainWindow();
     });
   </script>
 </body>

@@ -32,8 +32,18 @@ contextBridge.exposeInMainWorld('api', {
 
   // 应用设置
   getAppConfig: () => ipcRenderer.invoke('get-app-config'),
-  compactMainWindow: () => ipcRenderer.invoke('compact-main-window'),
+  compactMainWindow: (buttonRect) => ipcRenderer.invoke('compact-main-window', buttonRect),
+  moveCompactWindow: (position) => ipcRenderer.send('move-compact-window', position),
   restoreMainWindow: () => ipcRenderer.invoke('restore-main-window'),
+  onCompactWindowEnter: (callback) => {
+    ipcRenderer.on('compact-window-enter', () => callback());
+  },
+  onCompactWindowReady: (callback) => {
+    ipcRenderer.on('compact-window-ready', () => callback());
+  },
+  onCompactWindowLeave: (callback) => {
+    ipcRenderer.on('compact-window-leave', () => callback());
+  },
   toggleAlwaysOnTop: () => ipcRenderer.invoke('toggle-always-on-top'),
   onAppConfigUpdated: (callback) => {
     ipcRenderer.on('app-config-updated', (event, config) => callback(config));

@@ -551,7 +551,10 @@
       updatePinButton(alwaysOnTop);
     });
 
-    compactWindowBtn.addEventListener('click', () => window.api.compactMainWindow());
+    compactWindowBtn.addEventListener('click', () => {
+      const { x, y, width, height } = compactWindowBtn.getBoundingClientRect();
+      window.api.compactMainWindow({ x, y, width, height });
+    });
 
     window.api.onAppConfigUpdated(config => {
       window.appConfig = config;
