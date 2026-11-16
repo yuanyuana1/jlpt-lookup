@@ -67,7 +67,12 @@
     <button id="restoreButton" type="button" title="展开 JLPT Lookup" aria-label="展开 JLPT Lookup">あ</button>
   </div>
   <script>
-    window.api.onCompactWindowEnter(() => document.body.classList.add('entering'));
+    window.api.onCompactWindowEnter(() => {
+      document.body.classList.remove('leaving', 'interactive');
+      document.body.classList.add('entering');
+      drag = null;
+      suppressClick = false;
+    });
     window.api.onCompactWindowReady(() => document.body.classList.add('interactive'));
     window.api.onCompactWindowLeave(() => document.body.classList.add('leaving'));
     const bubble = document.getElementById('bubble');

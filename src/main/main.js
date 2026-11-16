@@ -14,6 +14,8 @@ let mainWindow = null;
 let popupWindow = null;
 let compactWindow = null;
 let compactWindowState = null;
+let preloadedCompactWindow = null;
+let compactWindowReady = null;
 let tray = null;
 let opacityAnimationId = 0;
 
@@ -187,6 +189,9 @@ function createMainWindow() {
     event.preventDefault();
     mainWindow.hide();
   });
+  preloadCompactWindow().catch(error => {
+    console.error('Failed to preload compact window:', error.message);
+  });
 }
 
 function animateWindowOpacity(window, from, to, onComplete) {
@@ -211,32 +216,11 @@ function animateWindowOpacity(window, from, to, onComplete) {
   animate();
 }
 
-function compactMainWindow(buttonRect) {
-  if (!mainWindow || mainWindow.isDestroyed() || compactWindow) return false;
-  if (!buttonRect || ![buttonRect.x, buttonRect.y, buttonRect.width, buttonRect.height].every(Number.isFinite)
-    || buttonRect.width <= 0 || buttonRect.height <= 0) {
-    console.warn('Invalid compact button bounds received');
-    return false;
-  }
-
-  const windowBounds = mainWindow.getBounds();
-  const contentBounds = mainWindow.getContentBounds();
-  const anchorOffset = {
-    x: contentBounds.x - windowBounds.x + buttonRect.x + buttonRect.width / 2,
-    y: contentBounds.y - windowBounds.y + buttonRect.y + buttonRect.height / 2
-  };
-  compactWindowState = {
-    bounds: windowBounds,
-    anchorOffset,
-    isMaximized: mainWindow.isMaximized(),
-    isFullScreen: mainWindow.isFullScreen()
-  };
-  const size = 72;
+function preloadCompactWindow() {
+  if (preloadedCompactWindow && !preloadedCompactWindow.isDestroyed()) return compactWindowReady;
   const bubble = new BrowserWindow({
-    width: size,
-    height: size,
-    x: Math.round(windowBounds.x + anchorOffset.x - size / 2),
-    y: Math.round(windowBounds.y + anchorOffset.y - size / 2),
+    width: 72,
+    height: 72,
     show: false,
     frame: false,
     transparent: true,
@@ -251,31 +235,70 @@ function compactMainWindow(buttonRect) {
       nodeIntegration: false
     }
   });
-  compactWindow = bubble;
-
-  bubble.once('ready-to-show', () => {
-    if (compactWindow !== bubble || !mainWindow || mainWindow.isDestroyed()) return;
-    bubble.showInactive();
-    bubble.webContents.send('compact-window-enter');
-    animateWindowOpacity(mainWindow, 1, 0, () => {
-      if (compactWindow !== bubble) return;
-      mainWindow.hide();
-      mainWindow.setOpacity(1);
-      bubble.webContents.send('compact-window-ready');
+  preloadedCompactWindow = bubble;
+  compactWindowReady = new Promise((resolve, reject) => {
+    bubble.once('ready-to-show', () => resolve(bubble));
+    bubble.once('closed', () => reject(new Error('Compact window closed before it was ready')));
+    bubble.loadFile(path.join(__dirname, '../renderer/compact.html')).catch(error => {
+      reject(error);
+      if (!bubble.isDestroyed()) bubble.destroy();
     });
   });
   bubble.on('closed', () => {
+    if (preloadedCompactWindow === bubble) {
+      preloadedCompactWindow = null;
+      compactWindowReady = null;
+    }
     if (compactWindow !== bubble) return;
     compactWindow = null;
     restoreMainWindow();
   });
-  bubble.loadFile(path.join(__dirname, '../renderer/compact.html')).catch(error => {
-    console.error('Failed to load compact window:', error.message);
-    if (compactWindow === bubble) {
-      compactWindow = null;
-      compactWindowState = null;
-    }
-    if (!bubble.isDestroyed()) bubble.destroy();
+  return compactWindowReady;
+}
+
+async function compactMainWindow(buttonRect) {
+  if (!mainWindow || mainWindow.isDestroyed() || compactWindowState) return false;
+  if (!buttonRect || ![buttonRect.x, buttonRect.y, buttonRect.width, buttonRect.height].every(Number.isFinite)
+    || buttonRect.width <= 0 || buttonRect.height <= 0) {
+    console.warn('Invalid compact button bounds received');
+    return false;
+  }
+
+  const windowBounds = mainWindow.getBounds();
+  const contentBounds = mainWindow.getContentBounds();
+  const anchorOffset = {
+    x: contentBounds.x - windowBounds.x + buttonRect.x + buttonRect.width / 2,
+    y: contentBounds.y - windowBounds.y + buttonRect.y + buttonRect.height / 2
+  };
+  const state = {
+    bounds: windowBounds,
+    anchorOffset,
+    isMaximized: mainWindow.isMaximized(),
+    isFullScreen: mainWindow.isFullScreen()
+  };
+  compactWindowState = state;
+  let bubble;
+  try {
+    bubble = await preloadCompactWindow();
+  } catch (error) {
+    if (compactWindowState === state) compactWindowState = null;
+    console.error('Failed to prepare compact window:', error.message);
+    throw error;
+  }
+  if (compactWindowState !== state || !mainWindow || mainWindow.isDestroyed()) return false;
+
+  compactWindow = bubble;
+  bubble.setPosition(
+    Math.round(windowBounds.x + anchorOffset.x - 36),
+    Math.round(windowBounds.y + anchorOffset.y - 36)
+  );
+  bubble.showInactive();
+  bubble.webContents.send('compact-window-enter');
+  animateWindowOpacity(mainWindow, 1, 0, () => {
+    if (compactWindow !== bubble) return;
+    mainWindow.hide();
+    mainWindow.setOpacity(1);
+    bubble.webContents.send('compact-window-ready');
   });
   return true;
 }
@@ -307,13 +330,14 @@ function restoreMainWindow() {
     bubble.webContents.send('compact-window-leave');
     animateWindowOpacity(mainWindow, 0, 1, () => {
       mainWindow.setOpacity(1);
-      if (!bubble.isDestroyed()) bubble.close();
+      if (!bubble.isDestroyed()) bubble.hide();
       compactWindowState = null;
     });
     return true;
   }
 
   ++opacityAnimationId;
+  if (preloadedCompactWindow && !preloadedCompactWindow.isDestroyed()) preloadedCompactWindow.hide();
   compactWindowState = null;
   mainWindow.setOpacity(1);
   mainWindow.show();
